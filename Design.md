@@ -88,4 +88,5 @@ A Festival represents the overall event, containing all Shows, Performances, and
   by genre and venue.
 - `GetNearbyPerformances`: Returns the list of Performances taking place near a specified location and starting 
   within a specified time range.
+- `UpdateFromFringeDataset`: Updates the festival's information from a Fringe JSON dataset.
 

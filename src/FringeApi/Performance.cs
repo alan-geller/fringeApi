@@ -7,10 +7,14 @@ public class Performance
 {
     public string Id { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
-    public DateTime Start { get; set; }
-    public DateTime End { get; set; }
-    public string? Title { get; set; }
-    public double Price { get; set; }
+    public DateTime Date { get; set; }
+    public TimeSpan Time { get; set; }
+    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    public Show? Show { get; set; }
+    public Venue? Venue { get; set; }
+
+    public DateTime Start => Date.Date.Add(Time);
+    public DateTime End => Start.AddMinutes(90);
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
