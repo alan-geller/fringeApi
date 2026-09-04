@@ -2,67 +2,125 @@ using System.Text.Json;
 
 namespace FringeApi;
 
-public class Festival
+public sealed class Festival
 {
-    public string Name { get; set; } = string.Empty;
-    public string Location { get; set; } = string.Empty;
-    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
-    public Dictionary<string, string> Extra { get; set; } = new();
+    internal const string DateFormat = "yyyy-MM-dd HH:mm:ss";
 
-    public List<Show> Shows { get; } = new();
-    public List<Performance> Performances { get; } = new();
-    public List<Venue> Venues { get; } = new();
+    public string Name { get; private set; } = string.Empty;
+    public DateTime? LastUpdated { get; private set; }
+    public Dictionary<string, string> Extra { get; private set; } = new();
 
-    public void UpdateFromFringeDataset(IEnumerable<Show> shows, IEnumerable<Performance> performances, IEnumerable<Venue> venues)
+    private List<Show> Shows { get; } = new();
+    internal List<Performance> Performances { get; } = new();
+    private List<Venue> Venues { get; } = new();
+    private Dictionary<string, Venue> VenuesById { get; } = new();
+    private Dictionary<string, Venue> VenuesByCode { get; } = new();
+    private Dictionary<string, Show> ShowsById { get; } = new();
+    private ApiClient apiClient;
+
+    public int ShowCount => Shows.Count;
+    public int VenueCount => Venues.Count;
+    public int PerformanceCount => Performances.Count;
+
+    public Festival(string userId, string apiKey, string festival = "demofringe")
     {
-        Shows.Clear();
-        Performances.Clear();
-        Venues.Clear();
+        this.apiClient = new ApiClient(userId, apiKey, festival);
+        this.Name = festival;
+    }
 
-        foreach (var venue in venues)
+    internal static DateTime ParseFringeDateTime(JsonElement element)
+    {
+        var s = element.GetString() ?? string.Empty;
+        return DateTime.ParseExact(s, DateFormat, null);
+    }
+
+    private async Task<(IEnumerable<Show>, IEnumerable<Venue>)> FetchUpdates()
+    {
+        // Implementation for fetching updates from the API
+        var filter = "";
+        if (LastUpdated.HasValue)
         {
-            Venues.Add(venue);
+            var date = LastUpdated.Value.ToString(DateFormat);
+            filter = $"modified_from={date}";
         }
+        var shows = await apiClient.GetAndDeserializeAsync<Show>("events", filter);
+        var venues = await apiClient.GetAndDeserializeAsync<Venue>("venues", filter);
+        return (shows, venues);
+    }
 
-        foreach (var show in shows)
+    private async Task<(JsonDocument, JsonDocument)> FetchJsonUpdates()
+    {
+        var showsJson = await apiClient.GetJsonAsync("events", "");
+        var venuesJson = await apiClient.GetJsonAsync("venues", "");
+        return (showsJson, venuesJson);
+    }
+
+    public async Task UpdateFromFringeDataset()
+    {
+        var (showsJson, venuesJson) = await FetchJsonUpdates();
+        
+        foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
         {
-            Shows.Add(show);
-            foreach (var performance in show.Performances)
+            if (venueJson.TryGetProperty("id", out var venueIdProperty))
             {
-                if (!Performances.Contains(performance))
+                var venueId = venueIdProperty.GetString();
+                if (venueId == null) continue; // This is an error in the response JSON
+                if (VenuesById.ContainsKey(venueId))
                 {
-                    Performances.Add(performance);
+                    VenuesById[venueId].UpdateFromJson(venueJson);
                 }
-                if (performance.Venue != null && !performance.Venue.Performances.Contains(performance))
+                else
                 {
-                    performance.Venue.Performances.Add(performance);
+                    var venue = new Venue() { Festival = this, Id = venueId };
+                    venue.UpdateFromJson(venueJson);
+                    Venues.Add(venue);
+                    VenuesById[venue.Id] = venue;
+                    VenuesByCode[venue.Code] = venue;
                 }
             }
         }
-
-        foreach (var performance in performances)
+        foreach (var showJson in showsJson.RootElement.EnumerateArray())
         {
-            if (!Performances.Contains(performance))
+            if (showJson.TryGetProperty("id", out var showIdProperty))
             {
-                Performances.Add(performance);
+                var showId = showIdProperty.GetString();
+                if (showId == null) continue; // This is an error in the response JSON
+                if (ShowsById.ContainsKey(showId))
+                {
+                    ShowsById[showId].UpdateFromJson(showJson);
+                }
+                else
+                {
+                    var show = new Show() { Festival = this, Id = showId };
+                    show.UpdateFromJson(showJson);
+                    Shows.Add(show);
+                    ShowsById[show.Id] = show;
+                }
             }
+        }
+    }
 
-            if (performance.Show != null && !performance.Show.Performances.Contains(performance))
-            {
-                performance.Show.Performances.Add(performance);
-            }
-
-            if (performance.Venue != null && !performance.Venue.Performances.Contains(performance))
-            {
-                performance.Venue.Performances.Add(performance);
+    public async Task UpdateFromFringeDataset2()
+    {
+        var (fetchedShows, fetchedVenues) = await FetchUpdates();
+        foreach (var venue in fetchedVenues)
+        {
+            if (VenuesById.ContainsKey(venue.Id)) {
+                VenuesById[venue.Id].Update(venue);
+            } else {
+                Venues.Add(venue);
+                VenuesByCode[venue.Code] = venue;
+                VenuesById[venue.Id] = venue;
             }
         }
 
-        foreach (var show in Shows)
+        foreach (var show in fetchedShows)
         {
-            if (show.Venue != null && !Venues.Contains(show.Venue))
-            {
-                Venues.Add(show.Venue);
+            if (ShowsById.ContainsKey(show.Id)) {
+                ShowsById[show.Id].Update(show);
+            } else {
+                Shows.Add(show);
+                ShowsById[show.Id] = show;
             }
         }
     }
@@ -75,7 +133,7 @@ public class Festival
         }
 
         return Shows
-            .Where(show => show.Performances.Any(performance => performance.Date >= start && performance.Date <= end))
+            .Where(show => show.Performances.Any(performance => performance.Start >= start && performance.Start <= end))
             .Where(show => string.IsNullOrWhiteSpace(genre) || string.Equals(show.Genre, genre, StringComparison.OrdinalIgnoreCase))
             .Where(show => string.IsNullOrWhiteSpace(venueName) || string.Equals(show.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase) || show.Performances.Any(p => string.Equals(p.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(show => show.Title)
@@ -106,8 +164,20 @@ public class Festival
             .ToList();
     }
 
-    public static Festival FromJson(string json)
+    public Venue? GetVenueByCode(string code)
     {
-        return JsonSerializer.Deserialize<Festival>(json) ?? new Festival();
+        VenuesByCode.TryGetValue(code, out var venue);
+        return venue;
+    }
+    
+    internal Venue? GetVenueById(string id)
+    {
+        VenuesById.TryGetValue(id, out var venue);
+        return venue;
+    }
+
+    public Venue? GetVenueByLocation(Position position, double maxDistanceKm)
+    {
+        throw new NotImplementedException();
     }
 }

@@ -30,7 +30,8 @@ A Show represents a theatrical production, including its title, genre, and perfo
 - `Genre`: The genre of the show.
 - `Performer`: The performer(s) presenting the show.
 - `Description`: A brief description of the show.
-- `Venue`: The venue where the show is performed. This will be null if the show is performed at multiple venues.
+- `Venue`: The venue where the show is performed. This may be null if the show is performed at 
+  multiple venues.
 - `LastUpdated`: The timestamp of the last update to the show's information.
 - `Extra`: Any additional information about the show from the Fringe dataset, as a string dictionary (JSON object).
 
@@ -45,8 +46,8 @@ A Show represents a theatrical production, including its title, genre, and perfo
 A Performance represents a specific instance of a Show, including its date, time, and venue.
 
 ### Properties
-- `Date`: The date of the performance.
-- `Time`: The time of the performance.
+- `Start`: The start date and time of the performance.
+- `End`: The date and time when the performance ends.
 - `Venue`: The venue where the performance takes place.
 - `LastUpdated`: The timestamp of the last update to the performance's information.
 - `Extra`: Any additional information about the performance from the Fringe dataset, as a string dictionary (JSON object).
@@ -62,6 +63,7 @@ A Venue represents a location where Performances take place, including its name 
 - `Name`: The name of the venue.
 - `Address`: The address of the venue.
 - `Code`: A unique code identifying the venue.
+- `Id`: The unique identifier of the venue. This is guaranteed to be constant across updates.
 - `LastUpdated`: The timestamp of the last update to the venue's information.
 - `Extra`: Any additional information about the venue from the Fringe dataset, as a string dictionary (JSON object).
 

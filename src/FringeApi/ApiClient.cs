@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace FringeApi;
 
-public class ApiClient
+public sealed class ApiClient
 {
     private static readonly HttpClient _httpClient = new HttpClient();
     private readonly string _userId;
@@ -51,7 +51,13 @@ public class ApiClient
         return jsonString;
     }
 
-    public List<T> DeserializeJson<T>(string jsonString)
+    public async Task<JsonDocument> GetJsonAsync(string endpoint, string args)
+    {
+        string jsonString = await GetDataAsync(endpoint, args);
+        return JsonDocument.Parse(jsonString);
+    }
+
+    private List<T> DeserializeJson<T>(string jsonString)
     {
         var options = new JsonSerializerOptions
         {
