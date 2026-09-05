@@ -56,25 +56,4 @@ public sealed class ApiClient
         string jsonString = await GetDataAsync(endpoint, args);
         return JsonDocument.Parse(jsonString);
     }
-
-    private List<T> DeserializeJson<T>(string jsonString)
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            PropertyNameCaseInsensitive = true,
-            AllowTrailingCommas = true,
-            ReadCommentHandling = JsonCommentHandling.Skip
-        };
-        options.Converters.Add(new DateTimeConverter());
-
-        List<T> data = JsonSerializer.Deserialize<List<T>>(jsonString, options) ?? new List<T>();
-        return data;
-    }
-    
-    public async Task<List<T>> GetAndDeserializeAsync<T>(string endpoint, string args)
-    {
-        string jsonString = await GetDataAsync(endpoint, args);
-        return DeserializeJson<T>(jsonString);
-    }
 }

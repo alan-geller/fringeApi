@@ -34,30 +34,25 @@ public sealed class Festival
         return DateTime.ParseExact(s, DateFormat, null);
     }
 
-    private async Task<(IEnumerable<Show>, IEnumerable<Venue>)> FetchUpdates()
+    private async Task<(JsonDocument, JsonDocument)> FetchJsonUpdates(string args)
     {
-        // Implementation for fetching updates from the API
-        var filter = "";
-        if (LastUpdated.HasValue)
-        {
-            var date = LastUpdated.Value.ToString(DateFormat);
-            filter = $"modified_from={date}";
-        }
-        var shows = await apiClient.GetAndDeserializeAsync<Show>("events", filter);
-        var venues = await apiClient.GetAndDeserializeAsync<Venue>("venues", filter);
-        return (shows, venues);
-    }
-
-    private async Task<(JsonDocument, JsonDocument)> FetchJsonUpdates()
-    {
-        var showsJson = await apiClient.GetJsonAsync("events", "");
-        var venuesJson = await apiClient.GetJsonAsync("venues", "");
+        var showsJson = await apiClient.GetJsonAsync("events", args);
+        var venuesJson = await apiClient.GetJsonAsync("venues", args);
         return (showsJson, venuesJson);
     }
 
     public async Task UpdateFromFringeDataset()
     {
-        var (showsJson, venuesJson) = await FetchJsonUpdates();
+        var args = "";
+        if (LastUpdated.HasValue)
+        {
+            // Note that Edinburgh is in the GMT timezone, so the date should be in UTC
+            var date = LastUpdated.Value.ToString(DateFormat);
+            // Append the modified_from filter to the API request
+            args = $"modified_from={date}";
+        }
+        LastUpdated = DateTime.UtcNow;
+        var (showsJson, venuesJson) = await FetchJsonUpdates(args);
         
         foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
         {
@@ -96,31 +91,6 @@ public sealed class Festival
                     Shows.Add(show);
                     ShowsById[show.Id] = show;
                 }
-            }
-        }
-    }
-
-    public async Task UpdateFromFringeDataset2()
-    {
-        var (fetchedShows, fetchedVenues) = await FetchUpdates();
-        foreach (var venue in fetchedVenues)
-        {
-            if (VenuesById.ContainsKey(venue.Id)) {
-                VenuesById[venue.Id].Update(venue);
-            } else {
-                Venues.Add(venue);
-                VenuesByCode[venue.Code] = venue;
-                VenuesById[venue.Id] = venue;
-            }
-        }
-
-        foreach (var show in fetchedShows)
-        {
-            if (ShowsById.ContainsKey(show.Id)) {
-                ShowsById[show.Id].Update(show);
-            } else {
-                Shows.Add(show);
-                ShowsById[show.Id] = show;
             }
         }
     }
