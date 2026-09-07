@@ -85,6 +85,10 @@ public class Show
                     }
                     break;
                 case "performances":
+                    // This has to be a bit complicated because the API always sends the full list of performances,
+                    // so we need to either update existing performances or add new ones.
+                    // Dropped performances just don't appear, so any missing ones should be removed from our list.
+                    HashSet<string> seenPerformanceIds = new HashSet<string>();
                     foreach (var performanceJson in kvp.Value.EnumerateArray())
                     {
                         var pid = performanceJson.GetProperty("id").GetString() ?? string.Empty;
@@ -102,7 +106,15 @@ public class Show
                                 PerformancesById[pid] = performance;
                                 Festival.AddPerformance(performance);
                             }
+                            seenPerformanceIds.Add(pid);
                         }
+                    }
+                    // Remove any performances that were not seen in the latest update
+                    foreach (var performance in Performances.Where(p => !seenPerformanceIds.Contains(p.Id)).ToList())
+                    {
+                        PerformancesById.Remove(performance.Id);
+                        Performances.Remove(performance);
+                        Festival.DropPerformance(performance);
                     }
                     break;
                 default:

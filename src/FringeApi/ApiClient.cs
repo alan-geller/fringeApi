@@ -6,24 +6,24 @@ namespace FringeApi;
 public sealed class ApiClient
 {
     private static readonly HttpClient _httpClient = new HttpClient();
-    private readonly string _userId;
-    private readonly string _apiKey;
-    private readonly string _festival;
+    private readonly string userId;
+    private readonly string apiKey;
+    private readonly string festival;
 
     const string BaseUrl = "https://api.edinburghfestivalcity.com";
 
     public ApiClient(string userId, string apiKey, string festival = "demofringe")
     {
-        _userId = userId;
-        _apiKey = apiKey;
-        _festival = festival;
+        this.userId = userId;
+        this.apiKey = apiKey;
+        this.festival = festival;
     }
 
     private string BuildUrl(string endpoint, string args)
     {
-        string _args = string.IsNullOrEmpty(args) ? "" : $"&{args}";
-        string unsignedUrl = $"/{endpoint}?festival={_festival}{_args}&key={_userId}";
-        string hash = HmacSha1(unsignedUrl, _apiKey);
+        string argsForQueryString = string.IsNullOrEmpty(args) ? "" : $"&{args}";
+        string unsignedUrl = $"/{endpoint}?festival={festival}{argsForQueryString}&key={userId}";
+        string hash = HmacSha1(unsignedUrl, apiKey);
         return $"{BaseUrl}{unsignedUrl}&signature={hash}";
     }
 

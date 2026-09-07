@@ -11,10 +11,18 @@ var apiKey = config["apiKey"] ?? "";
 
 var festival = new Festival("5Jb4HXteE1tG8UWA", apiKey);
 
-await festival.UpdateFromFringeDataset();
+var (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
+
+Console.WriteLine("Festival loaded successfully.");
+Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
+Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
+
+(venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 
 Console.WriteLine("Festival updated successfully.");
-Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
+Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
+Console.WriteLine($"Now {festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
+
 
 // var client = new ApiClient("5Jb4HXteE1tG8UWA", apiKey, "demofringe");
 

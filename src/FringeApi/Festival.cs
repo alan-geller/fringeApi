@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Web;
 
 namespace FringeApi;
 
@@ -42,16 +43,17 @@ public sealed class Festival
         return (showsJson, venuesJson);
     }
 
-    public async Task UpdateFromFringeDataset()
+    public async Task<(int venueUpdatesCount, int showUpdatesCount)> UpdateFromFringeDataset()
     {
-        void ProcessVenueUpdates(JsonDocument venuesJson)
+        int ProcessVenueUpdates(JsonDocument venuesJson)
         {
+            int count = 0;
             foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
             {
                 if (venueJson.TryGetProperty("id", out var venueIdProperty))
                 {
                     var venueId = venueIdProperty.GetString();
-                    if (venueId == null) continue; // This is an error in the response JSON
+                    if (venueId == null) continue; // This should never happen
                     if (VenuesById.ContainsKey(venueId))
                     {
                         VenuesById[venueId].UpdateFromJson(venueJson);
@@ -62,18 +64,22 @@ public sealed class Festival
                         venue.UpdateFromJson(venueJson);
                         AddVenue(venue);
                     }
+                    count++;
                 }
+                // The "else" should never happen because every venue should have an "id" property
             }
+            return count;
         }
 
-        void ProcessShowUpdates(JsonDocument showsJson)
+        int ProcessShowUpdates(JsonDocument showsJson)
         {
+            int count = 0;
             foreach (var showJson in showsJson.RootElement.EnumerateArray())
             {
                 if (showJson.TryGetProperty("id", out var showIdProperty))
                 {
                     var showId = showIdProperty.GetString();
-                    if (showId == null) continue; // This is an error in the response JSON
+                    if (showId == null) continue; // This should never happen
                     if (ShowsById.ContainsKey(showId))
                     {
                         ShowsById[showId].UpdateFromJson(showJson);
@@ -84,32 +90,37 @@ public sealed class Festival
                         show.UpdateFromJson(showJson);
                         AddShow(show);
                     }
+                    count++;
                 }
+                // The "else" should never happen because every show should have an "id" property
             }
+            return count;
         }
 
-        async Task FetchAndProcessUpdates(string endpoint, string filter, Action<JsonDocument> processUpdates)
+        async Task<int> FetchAndProcessUpdates(string endpoint, string filter, Func<JsonDocument, int> processUpdates)
         {
             // For both, loop fetching a chunk at a time. The Fringe API by default returns paginated
             // results in chunks of 25. We can specify a larger chunk size, up to 100. 
             // The start index of the first chunk is 0, not 1.
             var start = 0;
             var chunkSize = 100;
+            int count  = 0;
             JsonDocument json;
             do
             {
                 var argsWithPagination = $"{filter}from={start}&size={chunkSize}";
                 json = await apiClient.GetJsonAsync(endpoint, argsWithPagination);
-                processUpdates(json);
+                count += processUpdates(json);
                 start += chunkSize;
             } while (json.RootElement.GetArrayLength() == chunkSize);
+            return count;
         }
 
         var args = "";
         if (LastUpdated.HasValue)
         {
             // Note that Edinburgh is in the GMT timezone, so the date should be in UTC
-            var date = LastUpdated.Value.ToString(DateFormat);
+            var date = HttpUtility.UrlEncode(LastUpdated.Value.ToString(DateFormat));
             // Append the modified_from filter to the API request
             args = $"modified_from={date}&";
         }
@@ -117,8 +128,10 @@ public sealed class Festival
         LastUpdated = DateTime.UtcNow.AddMinutes(-10);
 
         // First process venues, then shows.
-        await FetchAndProcessUpdates("venues", args, ProcessVenueUpdates);
-        await FetchAndProcessUpdates("events", args, ProcessShowUpdates);
+        int venueUpdatesCount = await FetchAndProcessUpdates("venues", args, ProcessVenueUpdates);
+        int showUpdatesCount = await FetchAndProcessUpdates("events", args, ProcessShowUpdates);
+
+        return (venueUpdatesCount, showUpdatesCount);
     }
 
     internal void AddVenue(Venue venue)
@@ -150,6 +163,12 @@ public sealed class Festival
             Performances.Add(performance);
             PerformancesById[performance.Id] = performance;
         }
+    }
+
+    internal void DropPerformance(Performance performance)
+    {
+        PerformancesById.Remove(performance.Id);
+        Performances.Remove(performance);
     }
 
     public List<Show> GetShowsByDate(DateTime start, DateTime end, string? genre = null, string? venueName = null)
