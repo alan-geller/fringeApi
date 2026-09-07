@@ -42,7 +42,7 @@ public class Show
             .ToList();
     }
 
-    public void UpdateFromJson(JsonElement json)
+    internal void UpdateFromJson(JsonElement json)
     {
         if (json.TryGetProperty("id", out var id))
         {
@@ -78,7 +78,10 @@ public class Show
                     var vid = kvp.Value.GetProperty("id").GetString() ?? string.Empty;
                     if (!String.IsNullOrEmpty(vid))
                     {
-                        Venue = Festival.GetVenueById(vid);;
+                        var oldVenue = Venue;
+                        Venue = Festival.GetVenueById(vid);
+                        oldVenue?.Shows.Remove(this);
+                        Venue?.Shows.Add(this);
                     }
                     break;
                 case "performances":
@@ -97,7 +100,7 @@ public class Show
                                 performance.UpdateFromJson(performanceJson);
                                 Performances.Add(performance);
                                 PerformancesById[pid] = performance;
-                                Festival.Performances.Add(performance);
+                                Festival.AddPerformance(performance);
                             }
                         }
                     }
@@ -109,21 +112,5 @@ public class Show
             }
         }
         LastUpdated = DateTime.UtcNow;
-    }
-
-    internal void Update(Show show)
-    {
-        Title = show.Title;
-        Genre = show.Genre;
-        Performer = show.Performer;
-        Description = show.Description;
-        Subtitle = show.Subtitle;
-        Venue = show.Venue;
-        LastUpdated = show.LastUpdated;
-        foreach (var kvp in show.Extra ?? new Dictionary<string, JsonElement>())
-        {
-            Extra ??= new Dictionary<string, JsonElement>();
-            Extra[kvp.Key] = kvp.Value;
-        }
     }
 }

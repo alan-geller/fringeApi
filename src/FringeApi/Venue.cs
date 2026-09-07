@@ -13,7 +13,7 @@ public class Venue
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 	public required Festival Festival { get; init; }
  
-    public List<Performance> Performances { get; } = new();
+    public HashSet<Show> Shows { get; } = new();
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -62,6 +62,8 @@ public class Venue
 		}
 		LastUpdated = DateTime.UtcNow;
 	}
+
+
 }
 
 public class Position

@@ -16,6 +16,7 @@ public sealed class Festival
     private Dictionary<string, Venue> VenuesById { get; } = new();
     private Dictionary<string, Venue> VenuesByCode { get; } = new();
     private Dictionary<string, Show> ShowsById { get; } = new();
+    public Dictionary<string, Performance> PerformancesById { get; } = new();
     private ApiClient apiClient;
 
     public int ShowCount => Shows.Count;
@@ -43,55 +44,111 @@ public sealed class Festival
 
     public async Task UpdateFromFringeDataset()
     {
+        void ProcessVenueUpdates(JsonDocument venuesJson)
+        {
+            foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
+            {
+                if (venueJson.TryGetProperty("id", out var venueIdProperty))
+                {
+                    var venueId = venueIdProperty.GetString();
+                    if (venueId == null) continue; // This is an error in the response JSON
+                    if (VenuesById.ContainsKey(venueId))
+                    {
+                        VenuesById[venueId].UpdateFromJson(venueJson);
+                    }
+                    else
+                    {
+                        var venue = new Venue() { Festival = this, Id = venueId };
+                        venue.UpdateFromJson(venueJson);
+                        AddVenue(venue);
+                    }
+                }
+            }
+        }
+
+        void ProcessShowUpdates(JsonDocument showsJson)
+        {
+            foreach (var showJson in showsJson.RootElement.EnumerateArray())
+            {
+                if (showJson.TryGetProperty("id", out var showIdProperty))
+                {
+                    var showId = showIdProperty.GetString();
+                    if (showId == null) continue; // This is an error in the response JSON
+                    if (ShowsById.ContainsKey(showId))
+                    {
+                        ShowsById[showId].UpdateFromJson(showJson);
+                    }
+                    else
+                    {
+                        var show = new Show() { Festival = this, Id = showId };
+                        show.UpdateFromJson(showJson);
+                        AddShow(show);
+                    }
+                }
+            }
+        }
+
+        async Task FetchAndProcessUpdates(string endpoint, string filter, Action<JsonDocument> processUpdates)
+        {
+            // For both, loop fetching a chunk at a time. The Fringe API by default returns paginated
+            // results in chunks of 25. We can specify a larger chunk size, up to 100. 
+            // The start index of the first chunk is 0, not 1.
+            var start = 0;
+            var chunkSize = 100;
+            JsonDocument json;
+            do
+            {
+                var argsWithPagination = $"{filter}from={start}&size={chunkSize}";
+                json = await apiClient.GetJsonAsync(endpoint, argsWithPagination);
+                processUpdates(json);
+                start += chunkSize;
+            } while (json.RootElement.GetArrayLength() == chunkSize);
+        }
+
         var args = "";
         if (LastUpdated.HasValue)
         {
             // Note that Edinburgh is in the GMT timezone, so the date should be in UTC
             var date = LastUpdated.Value.ToString(DateFormat);
             // Append the modified_from filter to the API request
-            args = $"modified_from={date}";
+            args = $"modified_from={date}&";
         }
-        LastUpdated = DateTime.UtcNow;
-        var (showsJson, venuesJson) = await FetchJsonUpdates(args);
-        
-        foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
+        // Fringe API docs suggests always allowing a 10 minute buffer for updates
+        LastUpdated = DateTime.UtcNow.AddMinutes(-10);
+
+        // First process venues, then shows.
+        await FetchAndProcessUpdates("venues", args, ProcessVenueUpdates);
+        await FetchAndProcessUpdates("events", args, ProcessShowUpdates);
+    }
+
+    internal void AddVenue(Venue venue)
+    {
+        // Venue ID and code are required and immutable
+        if (!VenuesById.ContainsKey(venue.Id))
         {
-            if (venueJson.TryGetProperty("id", out var venueIdProperty))
-            {
-                var venueId = venueIdProperty.GetString();
-                if (venueId == null) continue; // This is an error in the response JSON
-                if (VenuesById.ContainsKey(venueId))
-                {
-                    VenuesById[venueId].UpdateFromJson(venueJson);
-                }
-                else
-                {
-                    var venue = new Venue() { Festival = this, Id = venueId };
-                    venue.UpdateFromJson(venueJson);
-                    Venues.Add(venue);
-                    VenuesById[venue.Id] = venue;
-                    VenuesByCode[venue.Code] = venue;
-                }
-            }
+            Venues.Add(venue);
+            VenuesById[venue.Id] = venue;
+            VenuesByCode[venue.Code] = venue;
         }
-        foreach (var showJson in showsJson.RootElement.EnumerateArray())
+    }
+
+    internal void AddShow(Show show)
+    {
+        // Show ID is required and immutable
+        if (!ShowsById.ContainsKey(show.Id))
         {
-            if (showJson.TryGetProperty("id", out var showIdProperty))
-            {
-                var showId = showIdProperty.GetString();
-                if (showId == null) continue; // This is an error in the response JSON
-                if (ShowsById.ContainsKey(showId))
-                {
-                    ShowsById[showId].UpdateFromJson(showJson);
-                }
-                else
-                {
-                    var show = new Show() { Festival = this, Id = showId };
-                    show.UpdateFromJson(showJson);
-                    Shows.Add(show);
-                    ShowsById[show.Id] = show;
-                }
-            }
+            ShowsById[show.Id] = show;
+            Shows.Add(show);
+        }
+    }
+
+    internal void AddPerformance(Performance performance)
+    {
+        // Performance ID is required and immutable
+        if (!PerformancesById.ContainsKey(performance.Id))
+        {
+            Performances.Add(performance);
+            PerformancesById[performance.Id] = performance;
         }
     }
 
