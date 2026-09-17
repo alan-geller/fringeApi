@@ -7,6 +7,8 @@
 - The system should support multithreaded access. In particular, it should allow multiple readers
   to access the system concurrently without blocking each other, and should allow a single writer
   to access the system exclusively without unduly delaying readers.
+- The system should use UTC timestamps for all date and time information to avoid issues with time zones.
+- The system should allow all festival information to be saved to or loaded from local storage.
 
 We assume robust garbage collection and so don't worry about limiting pointers between objects, 
 nor about avoiding pointer cycles.
@@ -30,9 +32,8 @@ A Show represents a theatrical production, including its title, genre, and perfo
 - `Genre`: The genre of the show.
 - `Performer`: The performer(s) presenting the show.
 - `Description`: A brief description of the show.
-- `Venue`: The venue where the show is performed. This may be null if the show is performed at 
-  multiple venues.
-- `LastUpdated`: The timestamp of the last update to the show's information.
+- `Venue`: The venue where the show is performed.
+- `LastUpdated`: The UTC timestamp of the last update to the show's information.
 - `Extra`: Any additional information about the show from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
@@ -48,8 +49,7 @@ A Performance represents a specific instance of a Show, including its date, time
 ### Properties
 - `Start`: The start date and time of the performance.
 - `End`: The date and time when the performance ends.
-- `Venue`: The venue where the performance takes place.
-- `LastUpdated`: The timestamp of the last update to the performance's information.
+- `LastUpdated`: The UTC timestamp of the last update to the performance's information.
 - `Extra`: Any additional information about the performance from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
