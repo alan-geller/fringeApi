@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using System.IO.Compression;
 using FringeApi;
 using Microsoft.Extensions.Configuration;
 
@@ -17,12 +18,16 @@ Console.WriteLine("Festival loaded successfully.");
 Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
 Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
-(venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
+// (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 
-Console.WriteLine("Festival updated successfully.");
-Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
-Console.WriteLine($"Now {festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
+// Console.WriteLine("Festival updated successfully.");
+// Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
+// Console.WriteLine($"Now {festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
+var raw = File.CreateText("merged.json.gz");
+var str = new GZipStream(raw.BaseStream, CompressionMode.Compress);
+festival.SaveToStream(str);
+str.Close();
 
 // var client = new ApiClient("5Jb4HXteE1tG8UWA", apiKey, "demofringe");
 

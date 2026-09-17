@@ -9,7 +9,6 @@ public sealed class Festival
 
     public string Name { get; private set; } = string.Empty;
     public DateTime? LastUpdated { get; private set; }
-    public Dictionary<string, string> Extra { get; private set; } = new();
 
     private List<Show> Shows { get; } = new();
     internal List<Performance> Performances { get; } = new();
@@ -105,14 +104,17 @@ public sealed class Festival
             var start = 0;
             var chunkSize = 100;
             int count  = 0;
-            JsonDocument json;
+            int thisCount;
             do
             {
                 var argsWithPagination = $"{filter}from={start}&size={chunkSize}";
-                json = await apiClient.GetJsonAsync(endpoint, argsWithPagination);
-                count += processUpdates(json);
-                start += chunkSize;
-            } while (json.RootElement.GetArrayLength() == chunkSize);
+                using (var json = await apiClient.GetJsonAsync(endpoint, argsWithPagination))
+                {
+                    count += processUpdates(json);
+                    start += chunkSize;
+                    thisCount = json.RootElement.GetArrayLength();
+                }
+            } while (thisCount == chunkSize);
             return count;
         }
 
@@ -223,6 +225,99 @@ public sealed class Festival
     }
 
     public Venue? GetVenueByLocation(Position position, double maxDistanceKm)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void SaveToStream(Stream stream)
+    {
+        HashSet<string> skippedVenueKeys = new() { "id", "name", "address", "code", "position" };
+        var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
+        // Start the root object
+        writer.WriteStartObject();
+        // First write the festival header
+        writer.WriteStartObject("festival");
+        writer.WriteString("name", Name);
+        if (LastUpdated.HasValue)
+        {
+            writer.WriteString("lastUpdated", LastUpdated.Value);
+        }
+        writer.WriteEndObject(); // end festival object
+
+        // Now the list of venues
+        writer.WriteStartArray("venues");
+        foreach (var venue in Venues)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", venue.Id);
+            writer.WriteString("name", venue.Name);
+            writer.WriteString("address", venue.Address);
+            writer.WriteString("code", venue.Code);
+            if (venue.Position != null)
+            {
+                writer.WriteStartObject("position");
+                writer.WriteNumber("lat", venue.Position.Lat);
+                writer.WriteNumber("lon", venue.Position.Lon);
+                writer.WriteEndObject();
+            }
+            foreach (var kvp in venue.Extra ?? new Dictionary<string, JsonElement>())
+            {
+                if (skippedVenueKeys.Contains(kvp.Key) || kvp.Value.ValueKind == JsonValueKind.Null)
+                    continue;
+                writer.WritePropertyName(kvp.Key);
+                kvp.Value.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+
+        // And finally the shows
+        writer.WriteStartArray("shows");
+        foreach (var show in Shows)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("id", show.Id);
+            writer.WriteString("status", show.Status.ToString().ToLower());
+            writer.WriteString("title", show.Title);
+            writer.WriteString("subtitle", show.Subtitle);
+            writer.WriteString("genre", show.Genre);
+            writer.WriteString("description", show.Description);
+            writer.WriteStartObject("venue");
+            writer.WriteString("id", show.Venue?.Id);
+            writer.WriteEndObject();
+            foreach (var kvp in show.Extra ?? new Dictionary<string, JsonElement>())
+            {
+                if (kvp.Value.ValueKind == JsonValueKind.Null || Show.SkippedKeys.Contains(kvp.Key))
+                    continue;
+                writer.WritePropertyName(kvp.Key);
+                kvp.Value.WriteTo(writer);
+            }
+            writer.WriteStartArray("performances");
+            foreach (var performance in show.Performances)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("id", performance.Id);
+                writer.WriteString("start", performance.Start.ToString(DateFormat));
+                writer.WriteString("end", performance.End.ToString(DateFormat));
+                foreach (var kvp in performance.Extra ?? new Dictionary<string, JsonElement>())
+                {
+                    if (kvp.Value.ValueKind == JsonValueKind.Null || Performance.SkippedKeys.Contains(kvp.Key))
+                        continue;
+                    writer.WritePropertyName(kvp.Key);
+                    kvp.Value.WriteTo(writer);
+                }
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray(); // End the array of performances
+            writer.WriteEndObject(); // End the show
+        }
+        writer.WriteEndArray();
+
+        writer.WriteEndObject(); // end root object
+        writer.Flush();
+    }
+
+    public static Festival LoadFromStream(Stream stream)
     {
         throw new NotImplementedException();
     }

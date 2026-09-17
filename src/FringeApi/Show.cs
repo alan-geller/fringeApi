@@ -15,7 +15,6 @@ public class Show
     public required Festival Festival { get; init; }
     public required string Id { get; init; }
     public ShowStatus Status { get; private set; } = ShowStatus.Active;
-    public string Code { get; private set; } = string.Empty;
     public string Title { get; private set; } = string.Empty;
     public string Genre { get; private set; } = string.Empty;
     public string Performer { get; private set; } = string.Empty;
@@ -28,6 +27,9 @@ public class Show
 
     public List<Performance> Performances { get; } = new();
     public Dictionary<string, Performance> PerformancesById { get; } = new();
+
+    internal static HashSet<string> SkippedKeys { get; } = new() { "id", "status", "title", "genre", "performer", 
+                                                                    "description", "subtitle", "venue" };
 
     public List<Performance> GetPerformancesByDate(DateTime start, DateTime end)
     {
@@ -52,7 +54,7 @@ public class Show
             }
             else if (Id != id.GetString())
             {
-                throw new InvalidOperationException($"Mismatched Id: existing Id = {Id}, new Id = {id.GetString()}");
+                throw new InvalidOperationException($"Mismatched show Id: existing Id = {Id}, new Id = {id.GetString()}");
             }
         }
         foreach (var kvp in json.EnumerateObject())
@@ -84,6 +86,21 @@ public class Show
                         Venue?.Shows.Add(this);
                     }
                     break;
+                case "status":
+                    var status = kvp.Value.GetString() ?? string.Empty;
+                    switch (status)
+                    {
+                        case "cancelled":
+                            Status = ShowStatus.Canceled;
+                            break;
+                        case "deleted":
+                            Status = ShowStatus.Deleted;
+                            break;
+                        default:
+                            Status = ShowStatus.Active;
+                            break;
+                    }
+                    break;
                 case "performances":
                     // This has to be a bit complicated because the API always sends the full list of performances,
                     // so we need to either update existing performances or add new ones.
@@ -100,7 +117,7 @@ public class Show
                             }
                             else
                             {
-                                var performance = new Performance() { Show = this };
+                                var performance = new Performance() { Show = this, Id = pid };
                                 performance.UpdateFromJson(performanceJson);
                                 Performances.Add(performance);
                                 PerformancesById[pid] = performance;
@@ -119,7 +136,7 @@ public class Show
                     break;
                 default:
                     Extra ??= new Dictionary<string, JsonElement>();
-                    Extra[kvp.Name] = kvp.Value;
+                    Extra[kvp.Name] = kvp.Value.Clone();
                     break;
             }
         }

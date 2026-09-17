@@ -12,25 +12,12 @@ public class Venue
 	public Position? Position { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 	public required Festival Festival { get; init; }
+	public static HashSet<string> SkippedKeys { get; } = new() { "id", "name", "address", "code", "position" };
  
     public HashSet<Show> Shows { get; } = new();
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
-
-	internal void Update(Venue venue)
-	{
-		Name = venue.Name;
-		Address = venue.Address;
-		Code = venue.Code;
-		Position = venue.Position;
-		foreach (var kvp in venue.Extra ?? new Dictionary<string, JsonElement>())
-		{
-			Extra ??= new Dictionary<string, JsonElement>();
-			Extra[kvp.Key] = kvp.Value;
-		}
-		LastUpdated = venue.LastUpdated;
-	}
 
 	internal void UpdateFromJson(JsonElement venueJson)
 	{
@@ -54,11 +41,10 @@ public class Venue
 		}
 		foreach (var kvp in venueJson.EnumerateObject())
 		{
-			if (kvp.Name != "id" && kvp.Name != "name" && kvp.Name != "address" && kvp.Name != "code" && kvp.Name != "position")
-			{
-				Extra ??= new Dictionary<string, JsonElement>();
-				Extra[kvp.Name] = kvp.Value;
-			}
+			if (SkippedKeys.Contains(kvp.Name) || kvp.Value.ValueKind == JsonValueKind.Null)
+				continue;
+			Extra ??= new Dictionary<string, JsonElement>();
+			Extra[kvp.Name] = kvp.Value.Clone();
 		}
 		LastUpdated = DateTime.UtcNow;
 	}

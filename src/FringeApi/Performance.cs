@@ -5,28 +5,23 @@ using System.Text.Json.Serialization;
 
 public class Performance
 {
-    public string Id { get; set; } = string.Empty;
+    public required string Id { get; init; }
     public DateTime Start { get; set; }
     public DateTime End { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
-    public required Show Show { get; set; }
-    public Venue? CustomVenue { get; set; }
-    public Venue? Venue { get { return CustomVenue ?? Show.Venue; }  }
-
-    [JsonExtensionData]
+    public required Show Show { get; init; }
+    public Venue? Venue { get => Show.Venue; }
     public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    public static HashSet<string> SkippedKeys { get; } = new() { "id" };
 
     public void UpdateFromJson(JsonElement json)
     {
         if (json.TryGetProperty("id", out var id))
         {
-            if (String.IsNullOrEmpty(Id))
+            if (Id != id.GetString())
             {
-                Id = id.GetString() ?? string.Empty;
-            }
-            else if (Id != id.GetString())
-            {
-                throw new InvalidOperationException($"Mismatched Id: existing Id = {Id}, new Id = {id.GetString()}");
+                throw new InvalidOperationException($"Mismatched performance Id on update: existing Id = {Id}, new Id = {id.GetString()}");
             }
         }
         foreach (var kvp in json.EnumerateObject())
@@ -41,10 +36,9 @@ public class Performance
                 case "end":
                     End = Festival.ParseFringeDateTime(kvp.Value);
                     continue;
-                // Venue specific for this performance? We don't know the tag
                 default:
                     Extra ??= new Dictionary<string, JsonElement>();
-                    Extra[kvp.Name] = kvp.Value;
+                    Extra[kvp.Name] = kvp.Value.Clone();
                     break;
             }
         }
