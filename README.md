@@ -1,6 +1,4 @@
-# fringeApi
-
-__.NET client for the Edinburgh Festivals Listing web API__
+# fringeApi: .NET client for the Edinburgh Festivals Listing web API
 
 This library provides a .NET client for interacting with the Edinburgh Festivals Listing web API.
 In particular, it allows you to retrieve information about festivals, venues, shows, and performances.

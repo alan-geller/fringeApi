@@ -28,6 +28,7 @@ In addition, there is a Festival object that acts as a container for the Shows, 
 A Show represents a theatrical production, including its title, genre, and performer.
 
 ### Properties
+
 - `Title`: The title of the show.
 - `Genre`: The genre of the show.
 - `Performer`: The performer(s) presenting the show.
@@ -37,9 +38,11 @@ A Show represents a theatrical production, including its title, genre, and perfo
 - `Extra`: Any additional information about the show from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
+
 - `Performances`: A list of Performance objects associated with this show.
 
 ### Key Methods
+
 - `GetPerformancesByDate`: Returns the list of Performance objects associated with this show within a date range.
 
 ## Performance
@@ -47,12 +50,14 @@ A Show represents a theatrical production, including its title, genre, and perfo
 A Performance represents a specific instance of a Show, including its date, time, and venue.
 
 ### Properties
+
 - `Start`: The start date and time of the performance.
 - `End`: The date and time when the performance ends.
 - `LastUpdated`: The UTC timestamp of the last update to the performance's information.
 - `Extra`: Any additional information about the performance from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
+
 - `Show`: The Show object associated with this performance.
 
 ## Venue
@@ -60,6 +65,7 @@ A Performance represents a specific instance of a Show, including its date, time
 A Venue represents a location where Performances take place, including its name and address.
 
 ### Properties
+
 - `Name`: The name of the venue.
 - `Address`: The address of the venue.
 - `Code`: A unique code identifying the venue.
@@ -68,6 +74,7 @@ A Venue represents a location where Performances take place, including its name 
 - `Extra`: Any additional information about the venue from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
+
 - `Performances`: A list of Performance objects taking place at this venue.
 
 ## Festival
@@ -75,12 +82,14 @@ A Venue represents a location where Performances take place, including its name 
 A Festival represents the overall event, containing all Shows, Performances, and Venues.
 
 ### Properties
+
 - `Name`: The name of the festival.
 - `Location`: The location of the festival.
 - `LastUpdated`: The timestamp of the last update to the festival's information.
 - `Extra`: Any additional information about the festival from the Fringe dataset, as a string dictionary (JSON object).
 
 ### Relationships
+
 - `Shows`: A list of all Show objects in the festival.
 - `Performances`: A list of all Performance objects in the festival.
 - `Venues`: A list of all Venue objects in the festival.
