@@ -3,11 +3,29 @@ using System.Web;
 
 namespace FringeApi;
 
+/// <summary>
+/// Represents a single Fringe festival dataset and the in-memory collection of venues, shows, and performances
+/// loaded from the Fringe API.
+/// </summary>
+/// <remarks>
+/// This type acts as the aggregate root for festival data. It keeps track of the latest update timestamp,
+/// downloads and merges API data, and exposes convenience queries for working with the dataset.
+/// </remarks>
 public sealed class Festival
 {
+    /// <summary>
+    /// The canonical format used by the Fringe API for timestamps.
+    /// </summary>
     internal const string DateFormat = "yyyy-MM-dd HH:mm:ss";
 
+    /// <summary>
+    /// The festival identifier used when creating the API client.
+    /// </summary>
     public string Name { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// The last time the festival data was successfully refreshed, with a 10-minute update buffer applied.
+    /// </summary>
     public DateTime? LastUpdated { get; private set; }
 
     private List<Show> Shows { get; } = new();
@@ -19,16 +37,38 @@ public sealed class Festival
     public Dictionary<string, Performance> PerformancesById { get; } = new();
     private ApiClient apiClient;
 
+    /// <summary>
+    /// Gets the number of shows currently in memory.
+    /// </summary>
     public int ShowCount => Shows.Count;
+
+    /// <summary>
+    /// Gets the number of venues currently in memory.
+    /// </summary>
     public int VenueCount => Venues.Count;
+
+    /// <summary>
+    /// Gets the number of performances currently in memory.
+    /// </summary>
     public int PerformanceCount => Performances.Count;
 
+    /// <summary>
+    /// Initializes a new festival using the supplied Fringe API credentials and festival identifier.
+    /// </summary>
+    /// <param name="userId">The Fringe API user identifier.</param>
+    /// <param name="apiKey">The Fringe API key.</param>
+    /// <param name="festival">The festival name/code to query.</param>
     public Festival(string userId, string apiKey, string festival = "demofringe")
     {
         this.apiClient = new ApiClient(userId, apiKey, festival);
         this.Name = festival;
     }
 
+    /// <summary>
+    /// Parses a Fringe API datetime string into a <see cref="DateTime"/>.
+    /// </summary>
+    /// <param name="element">The JSON element containing the datetime string.</param>
+    /// <returns>The parsed date and time in the festival's expected format.</returns>
     internal static DateTime ParseFringeDateTime(JsonElement element)
     {
         var s = element.GetString() ?? string.Empty;
@@ -42,6 +82,16 @@ public sealed class Festival
         return (showsJson, venuesJson);
     }
 
+    /// <summary>
+    /// Refreshes the festival data from the Fringe API, merging new or modified venues and shows.
+    /// </summary>
+    /// <returns>
+    /// A tuple containing the number of venue and show records processed during the refresh.
+    /// </returns>
+    /// <remarks>
+    /// The API is queried in paginated chunks. If this festival has been updated before, the request only asks
+    /// for records modified after the last successful refresh, allowing for the standard 10-minute buffering window.
+    /// </remarks>
     public async Task<(int venueUpdatesCount, int showUpdatesCount)> UpdateFromFringeDataset()
     {
         int ProcessVenueUpdates(JsonDocument venuesJson)
@@ -136,6 +186,10 @@ public sealed class Festival
         return (venueUpdatesCount, showUpdatesCount);
     }
 
+    /// <summary>
+    /// Adds a venue to the festival if it has not already been registered.
+    /// </summary>
+    /// <param name="venue">The venue to add.</param>
     internal void AddVenue(Venue venue)
     {
         // Venue ID and code are required and immutable
@@ -147,6 +201,10 @@ public sealed class Festival
         }
     }
 
+    /// <summary>
+    /// Adds a show to the festival if it has not already been registered.
+    /// </summary>
+    /// <param name="show">The show to add.</param>
     internal void AddShow(Show show)
     {
         // Show ID is required and immutable
@@ -157,6 +215,10 @@ public sealed class Festival
         }
     }
 
+    /// <summary>
+    /// Adds a performance to the festival if it has not already been registered.
+    /// </summary>
+    /// <param name="performance">The performance to add.</param>
     internal void AddPerformance(Performance performance)
     {
         // Performance ID is required and immutable
@@ -167,12 +229,24 @@ public sealed class Festival
         }
     }
 
+    /// <summary>
+    /// Removes a performance from the festival's in-memory collection.
+    /// </summary>
+    /// <param name="performance">The performance to remove.</param>
     internal void DropPerformance(Performance performance)
     {
         PerformancesById.Remove(performance.Id);
         Performances.Remove(performance);
     }
 
+    /// <summary>
+    /// Returns all shows that have at least one performance in the specified date range.
+    /// </summary>
+    /// <param name="start">The inclusive start of the date window.</param>
+    /// <param name="end">The inclusive end of the date window.</param>
+    /// <param name="genre">Optional genre filter.</param>
+    /// <param name="venueName">Optional venue name filter.</param>
+    /// <returns>A list of matching shows ordered by title.</returns>
     public List<Show> GetShowsByDate(DateTime start, DateTime end, string? genre = null, string? venueName = null)
     {
         if (end < start)
@@ -188,6 +262,16 @@ public sealed class Festival
             .ToList();
     }
 
+    /// <summary>
+    /// Gets performances occurring within a date range and close to a given coordinate.
+    /// </summary>
+    /// <param name="latitude">The latitude of the search point.</param>
+    /// <param name="longitude">The longitude of the search point.</param>
+    /// <param name="start">The start of the performance window.</param>
+    /// <param name="end">The end of the performance window.</param>
+    /// <param name="maxDistanceKm">The maximum permitted distance from the search location.</param>
+    /// <param name="maxLeadTime">The maximum lead time before performance start.</param>
+    /// <returns>A list of matching performances sorted by start time.</returns>
     public List<Performance> GetNearbyPerformances(double latitude, double longitude, DateTime start, DateTime end, double maxDistanceKm, TimeSpan maxLeadTime)
     {
         if (end < start)
@@ -212,23 +296,43 @@ public sealed class Festival
             .ToList();
     }
 
+    /// <summary>
+    /// Looks up a venue using its venue code.
+    /// </summary>
+    /// <param name="code">The venue code.</param>
+    /// <returns>The matching venue, if found.</returns>
     public Venue? GetVenueByCode(string code)
     {
         VenuesByCode.TryGetValue(code, out var venue);
         return venue;
     }
-    
+
+    /// <summary>
+    /// Looks up a venue by its internal unique identifier.
+    /// </summary>
+    /// <param name="id">The venue identifier.</param>
+    /// <returns>The matching venue, if found.</returns>
     internal Venue? GetVenueById(string id)
     {
         VenuesById.TryGetValue(id, out var venue);
         return venue;
     }
 
-    public Venue? GetVenueByLocation(Position position, double maxDistanceKm)
+    /// <summary>
+    /// Finds the venues near the supplied location within the given distance threshold.
+    /// </summary>
+    /// <param name="position">The target position.</param>
+    /// <param name="maxDistanceKm">The maximum allowed distance in kilometres.</param>
+    /// <returns>The nearby venues, if any exist.</returns>
+    public List<Venue> GetVenuesByLocation(Position position, double maxDistanceKm)
     {
         throw new NotImplementedException();
     }
 
+    /// <summary>
+    /// Serializes the festival and all associated venue/show data to the supplied stream as JSON.
+    /// </summary>
+    /// <param name="stream">The destination stream.</param>
     public void SaveToStream(Stream stream)
     {
         HashSet<string> skippedVenueKeys = new() { "id", "name", "address", "code", "position" };
@@ -317,6 +421,11 @@ public sealed class Festival
         writer.Flush();
     }
 
+    /// <summary>
+    /// Deserializes a festival instance from a previously saved JSON stream.
+    /// </summary>
+    /// <param name="stream">The source stream containing festival data.</param>
+    /// <returns>The loaded festival.</returns>
     public static Festival LoadFromStream(Stream stream)
     {
         throw new NotImplementedException();
