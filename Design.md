@@ -13,6 +13,15 @@
 We assume robust garbage collection and so don't worry about limiting pointers between objects, 
 nor about avoiding pointer cycles.
 
+## Styles and Conventions
+
+- Use PascalCase for all class names and properties.
+- Use camelCase for local variables and method parameters.
+- Use UTC timestamps for all date and time information.
+- Use JSON objects for storing additional information in the `Extra` property of each class.
+- In general, prefer automatic properties over instance variables for class design.
+- Avoid propagating exceptions outside of the system's boundaries, especially on async methods.
+
 ## Object Model
 
 The primary objects in the Fringe dataset are Show, Performance, and Venue.

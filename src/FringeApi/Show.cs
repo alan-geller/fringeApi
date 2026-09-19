@@ -27,7 +27,7 @@ public enum ShowStatus
 /// <summary>
 /// Represents a single show within a festival and owns the related performance data.
 /// </summary>
-public class Show
+public class Show : IJsonUpdatable
 {
     /// <summary>
     /// Gets the festival that owns this show.
@@ -125,7 +125,7 @@ public class Show
     /// </summary>
     /// <param name="json">The JSON element containing the updated show data.</param>
     /// <exception cref="InvalidOperationException">Thrown when the JSON payload contains a different show identifier than the current instance.</exception>
-    internal void UpdateFromJson(JsonElement json)
+    public void UpdateFromJson(JsonElement json)
     {
         if (json.TryGetProperty("id", out var id))
         {

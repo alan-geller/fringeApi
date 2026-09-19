@@ -4,6 +4,23 @@ using System.Web;
 namespace FringeApi;
 
 /// <summary>
+/// Defines a contract for types that can hydrate themselves from a JSON payload.
+/// </summary>
+/// <remarks>
+/// Implementations use this method to merge the supplied JSON data into an existing object instance,
+/// typically after deserializing a Fringe API response into a <see cref="JsonElement"/>.
+/// This interface allows us to write code that works for both Shows and Venues.
+/// </remarks>
+internal interface IJsonUpdatable
+{
+    /// <summary>
+    /// Updates the current instance using the provided JSON data.
+    /// </summary>
+    /// <param name="json">The JSON payload that contains the data to apply.</param>
+    void UpdateFromJson(JsonElement json);
+}
+
+/// <summary>
 /// Represents a single Fringe festival dataset and the in-memory collection of venues, shows, and performances
 /// loaded from the Fringe API.
 /// </summary>
@@ -28,9 +45,7 @@ public sealed class Festival
     /// </summary>
     public DateTime? LastUpdated { get; private set; }
 
-    private List<Show> Shows { get; } = new();
     internal List<Performance> Performances { get; } = new();
-    private List<Venue> Venues { get; } = new();
     private Dictionary<string, Venue> VenuesById { get; } = new();
     private Dictionary<string, Venue> VenuesByCode { get; } = new();
     private Dictionary<string, Show> ShowsById { get; } = new();
@@ -40,12 +55,12 @@ public sealed class Festival
     /// <summary>
     /// Gets the number of shows currently in memory.
     /// </summary>
-    public int ShowCount => Shows.Count;
+    public int ShowCount => ShowsById.Count;
 
     /// <summary>
     /// Gets the number of venues currently in memory.
     /// </summary>
-    public int VenueCount => Venues.Count;
+    public int VenueCount => VenuesById.Count;
 
     /// <summary>
     /// Gets the number of performances currently in memory.
@@ -91,59 +106,52 @@ public sealed class Festival
     /// <remarks>
     /// The API is queried in paginated chunks. If this festival has been updated before, the request only asks
     /// for records modified after the last successful refresh, allowing for the standard 10-minute buffering window.
+    /// <para>We use the IJsonUpdatable interface to allow us to share code between venues and shows when processing JSON updates.</para>
     /// </remarks>
     public async Task<(int venueUpdatesCount, int showUpdatesCount)> UpdateFromFringeDataset()
     {
-        int ProcessVenueUpdates(JsonDocument venuesJson)
+        int ProcessItemUpdates<T>(JsonDocument itemsJson, Dictionary<string, T> itemsById, Func<string, T> createAndRecordItem)
+            where T : IJsonUpdatable
         {
             int count = 0;
-            foreach (var venueJson in venuesJson.RootElement.EnumerateArray())
+            foreach (var itemJson in itemsJson.RootElement.EnumerateArray())
             {
-                if (venueJson.TryGetProperty("id", out var venueIdProperty))
+                if (itemJson.TryGetProperty("id", out var itemIdProperty))
                 {
-                    var venueId = venueIdProperty.GetString();
-                    if (venueId == null) continue; // This should never happen
-                    if (VenuesById.ContainsKey(venueId))
+                    var itemId = itemIdProperty.GetString();
+                    if (itemId == null) continue; // This should never happen
+                    if (itemsById.ContainsKey(itemId))
                     {
-                        VenuesById[venueId].UpdateFromJson(venueJson);
+                        itemsById[itemId].UpdateFromJson(itemJson);
                     }
                     else
                     {
-                        var venue = new Venue() { Festival = this, Id = venueId };
-                        venue.UpdateFromJson(venueJson);
-                        AddVenue(venue);
+                        T item = createAndRecordItem(itemId);
+                        item.UpdateFromJson(itemJson);
                     }
                     count++;
                 }
-                // The "else" should never happen because every venue should have an "id" property
+                // The "else" should never happen because every item should have an "id" property
             }
             return count;
         }
 
-        int ProcessShowUpdates(JsonDocument showsJson)
+        Venue CreateAndRecordVenue(string id)
         {
-            int count = 0;
-            foreach (var showJson in showsJson.RootElement.EnumerateArray())
+            var venue = new Venue() { Festival = this, Id = id };
+            VenuesById[venue.Id] = venue;
+            if (!string.IsNullOrEmpty(venue.Code))
             {
-                if (showJson.TryGetProperty("id", out var showIdProperty))
-                {
-                    var showId = showIdProperty.GetString();
-                    if (showId == null) continue; // This should never happen
-                    if (ShowsById.ContainsKey(showId))
-                    {
-                        ShowsById[showId].UpdateFromJson(showJson);
-                    }
-                    else
-                    {
-                        var show = new Show() { Festival = this, Id = showId };
-                        show.UpdateFromJson(showJson);
-                        AddShow(show);
-                    }
-                    count++;
-                }
-                // The "else" should never happen because every show should have an "id" property
+                VenuesByCode[venue.Code] = venue;
             }
-            return count;
+            return venue;
+        }
+
+        Show CreateAndRecordShow(string id)
+        {
+            var show = new Show() { Festival = this, Id = id };
+            ShowsById[show.Id] = show;
+            return show;
         }
 
         async Task<int> FetchAndProcessUpdates(string endpoint, string filter, Func<JsonDocument, int> processUpdates)
@@ -180,8 +188,10 @@ public sealed class Festival
         LastUpdated = DateTime.UtcNow.AddMinutes(-10);
 
         // First process venues, then shows.
-        int venueUpdatesCount = await FetchAndProcessUpdates("venues", args, ProcessVenueUpdates);
-        int showUpdatesCount = await FetchAndProcessUpdates("events", args, ProcessShowUpdates);
+        var processVenueUpdates = (JsonDocument json) => ProcessItemUpdates<Venue>(json, VenuesById, CreateAndRecordVenue);
+        var processShowUpdates = (JsonDocument json) => ProcessItemUpdates<Show>(json, ShowsById, CreateAndRecordShow);
+        int venueUpdatesCount = await FetchAndProcessUpdates("venues", args, processVenueUpdates);
+        int showUpdatesCount = await FetchAndProcessUpdates("events", args, processShowUpdates);
 
         return (venueUpdatesCount, showUpdatesCount);
     }
@@ -195,7 +205,6 @@ public sealed class Festival
         // Venue ID and code are required and immutable
         if (!VenuesById.ContainsKey(venue.Id))
         {
-            Venues.Add(venue);
             VenuesById[venue.Id] = venue;
             VenuesByCode[venue.Code] = venue;
         }
@@ -211,7 +220,6 @@ public sealed class Festival
         if (!ShowsById.ContainsKey(show.Id))
         {
             ShowsById[show.Id] = show;
-            Shows.Add(show);
         }
     }
 
@@ -254,7 +262,7 @@ public sealed class Festival
             (start, end) = (end, start);
         }
 
-        return Shows
+        return ShowsById.Values
             .Where(show => show.Performances.Any(performance => performance.Start >= start && performance.Start <= end))
             .Where(show => string.IsNullOrWhiteSpace(genre) || string.Equals(show.Genre, genre, StringComparison.OrdinalIgnoreCase))
             .Where(show => string.IsNullOrWhiteSpace(venueName) || string.Equals(show.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase) || show.Performances.Any(p => string.Equals(p.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase)))
@@ -350,7 +358,7 @@ public sealed class Festival
 
         // Now the list of venues
         writer.WriteStartArray("venues");
-        foreach (var venue in Venues)
+        foreach (var venue in VenuesById.Values)
         {
             writer.WriteStartObject();
             writer.WriteString("id", venue.Id);
@@ -377,7 +385,7 @@ public sealed class Festival
 
         // And finally the shows
         writer.WriteStartArray("shows");
-        foreach (var show in Shows)
+        foreach (var show in ShowsById.Values)
         {
             writer.WriteStartObject();
             writer.WriteString("id", show.Id);

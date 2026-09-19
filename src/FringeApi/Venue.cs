@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 /// <summary>
 /// Represents a venue associated with a festival.
 /// </summary>
-public class Venue
+public class Venue : IJsonUpdatable
 {
     /// <summary>
     /// Gets the unique identifier for the venue.
@@ -64,7 +64,7 @@ public class Venue
     /// </summary>
     /// <param name="venueJson">The JSON element containing the venue data.</param>
     /// <exception cref="InvalidOperationException">Thrown when the JSON payload contains a different venue identifier than the current instance.</exception>
-    internal void UpdateFromJson(JsonElement venueJson)
+    public void UpdateFromJson(JsonElement venueJson)
     {
         if (venueJson.TryGetProperty("id", out var id))
         {
