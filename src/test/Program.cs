@@ -11,6 +11,8 @@ var config = new ConfigurationBuilder()
 var apiKey = config["apiKey"] ?? "";
 
 var festival = new Festival("5Jb4HXteE1tG8UWA", apiKey);
+var logStream = File.CreateText("festival.log");
+festival.SetLogStream(logStream);
 
 var (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 
@@ -28,6 +30,7 @@ var raw = File.CreateText("merged.json.gz");
 var str = new GZipStream(raw.BaseStream, CompressionMode.Compress);
 festival.SaveToStream(str);
 str.Close();
+logStream.Close();
 
 // var client = new ApiClient("5Jb4HXteE1tG8UWA", apiKey, "demofringe");
 

@@ -51,6 +51,7 @@ public sealed class Festival
     private Dictionary<string, Show> ShowsById { get; } = new();
     public Dictionary<string, Performance> PerformancesById { get; } = new();
     private ApiClient apiClient;
+    private StreamWriter? logStream = null;
 
     /// <summary>
     /// Gets the number of shows currently in memory.
@@ -77,6 +78,33 @@ public sealed class Festival
     {
         this.apiClient = new ApiClient(userId, apiKey, festival);
         this.Name = festival;
+    }
+
+    public void SetLogStream(StreamWriter logStream)
+    {
+        if (this.logStream != null)
+        {
+            this.logStream.Dispose();
+        }
+        this.logStream = logStream;
+    }
+
+    internal void Log(string message)
+    {
+        if (logStream != null)
+        {
+            logStream.WriteLine(message);
+            logStream.Flush();
+        }
+    }
+
+    internal void LogException(Exception ex, string context)
+    {
+        if (logStream != null)
+        {
+            logStream.WriteLine($"Exception {ex.Message} while '{context}'");
+            logStream.Flush();
+        }
     }
 
     /// <summary>
@@ -188,12 +216,19 @@ public sealed class Festival
         LastUpdated = DateTime.UtcNow.AddMinutes(-10);
 
         // First process venues, then shows.
-        var processVenueUpdates = (JsonDocument json) => ProcessItemUpdates<Venue>(json, VenuesById, CreateAndRecordVenue);
-        var processShowUpdates = (JsonDocument json) => ProcessItemUpdates<Show>(json, ShowsById, CreateAndRecordShow);
-        int venueUpdatesCount = await FetchAndProcessUpdates("venues", args, processVenueUpdates);
-        int showUpdatesCount = await FetchAndProcessUpdates("events", args, processShowUpdates);
-
-        return (venueUpdatesCount, showUpdatesCount);
+        try
+        {
+            var processVenueUpdates = (JsonDocument json) => ProcessItemUpdates<Venue>(json, VenuesById, CreateAndRecordVenue);
+            var processShowUpdates = (JsonDocument json) => ProcessItemUpdates<Show>(json, ShowsById, CreateAndRecordShow);
+            int venueUpdatesCount = await FetchAndProcessUpdates("venues", args, processVenueUpdates);
+            int showUpdatesCount = await FetchAndProcessUpdates("events", args, processShowUpdates);
+            return (venueUpdatesCount, showUpdatesCount);
+        }
+        catch (System.Exception ex)
+        {
+            LogException(ex, "fetching and processing updates");
+            return (0, 0);
+        }
     }
 
     /// <summary>
