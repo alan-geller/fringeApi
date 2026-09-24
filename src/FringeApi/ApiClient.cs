@@ -96,4 +96,74 @@ public sealed class ApiClient
         string jsonString = await GetDataAsync(endpoint, args);
         return JsonDocument.Parse(jsonString);
     }
+
+    /// <summary>
+    /// Retrieves a paged JSON array from the specified endpoint and processes each item into a 
+    /// list of results.
+    /// </summary>
+    /// <typeparam name="T">The type produced by the item-processing callback.</typeparam>
+    /// <param name="endpoint">The API endpoint path to request.</param>
+    /// <param name="filter">Additional query-string prefix to include before the pagination parameters.</param>
+    /// <param name="processUpdates">A callback that transforms the JSON document into a result item.</param>
+    /// <returns>A list containing all non-null values returned by <paramref name="processUpdates"/>.</returns>
+    /// <exception cref="HttpRequestException">Thrown when the HTTP response indicates a failure status code.</exception>
+    /// <exception cref="JsonException">Thrown when the response content is not valid JSON.</exception>
+    internal async Task<List<T>> ProcessPagedJsonAsync<T>(string endpoint, string filter, 
+        Func<JsonDocument, T?> processUpdates)
+    {
+        var start = 0;
+        var chunkSize = 100;
+        List<T> result = new List<T>();
+        int thisCount;
+        do
+        {
+            var argsWithPagination = $"{filter}from={start}&size={chunkSize}";
+            using (var json = await GetJsonAsync(endpoint, argsWithPagination))
+            {
+                foreach (var item in json.RootElement.EnumerateArray())
+                {
+                    var processed = processUpdates(json);
+                    if (processed != null)
+                    {
+                        result.Add(processed);
+                    }
+                }
+                start += chunkSize;
+                thisCount = json.RootElement.GetArrayLength();
+            }
+        } while (thisCount == chunkSize);
+        return result;
+    }
+
+    /// <summary>
+    /// Retrieves a paged JSON array from the specified endpoint and invokes a callback 
+    /// for each element.
+    /// </summary>
+    /// <param name="endpoint">The API endpoint path to request.</param>
+    /// <param name="filter">Additional query-string prefix to include before the pagination parameters.</param>
+    /// <param name="processUpdates">A callback invoked once for each item in the results.</param>
+    /// <returns>The total number of items processed across all pages.</returns>
+    /// <exception cref="HttpRequestException">Thrown when the HTTP response indicates a failure status code.</exception>
+    /// <exception cref="JsonException">Thrown when the response content is not valid JSON.</exception>
+    internal async Task<int> ProcessPagedJsonVoidAsync(string endpoint, string filter, 
+        Action<JsonElement> processUpdates)
+    {
+        var start = 0;
+        var chunkSize = 100;
+        int thisCount;
+        do
+        {
+            var argsWithPagination = $"{filter}from={start}&size={chunkSize}";
+            using (var json = await GetJsonAsync(endpoint, argsWithPagination))
+            {
+                foreach (var item in json.RootElement.EnumerateArray())
+                {
+                    processUpdates(item);
+                }
+                thisCount = json.RootElement.GetArrayLength();
+                start += thisCount;
+            }
+        } while (thisCount == chunkSize);
+        return start;
+    }
 }
