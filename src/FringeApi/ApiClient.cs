@@ -16,6 +16,8 @@ public sealed class ApiClient
     private readonly string userId;
     private readonly string apiKey;
     private readonly string festival;
+    public int RetryLimit { get; set; } = 5;
+    public int RetryDelayMilliseconds { get; set; } = 1000;
 
     const string BaseUrl = "https://api.edinburghfestivalcity.com";
 
@@ -72,15 +74,38 @@ public sealed class ApiClient
     private async Task<string> GetDataAsync(string endpoint, string args)
     {
         string url = BuildUrl(endpoint, args);
-        var response = await httpClient.GetAsync(url);
-        response.EnsureSuccessStatusCode();
-        // Handle the case where the charset is "utf8", which .NET doesn't like, and change it to "utf-8"
-        if (response.Content.Headers.ContentType?.CharSet == "utf8")
+        for (int i = 0; i < RetryLimit; i++)
         {
-            response.Content.Headers.ContentType.CharSet = "utf-8";
+            try
+            {
+                var response = await httpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                // Handle the case where the charset is "utf8", which .NET doesn't like, and change it to "utf-8"
+                if (response.Content.Headers.ContentType?.CharSet == "utf8")
+                {
+                    response.Content.Headers.ContentType.CharSet = "utf-8";
+                }
+                var jsonString = await response.Content.ReadAsStringAsync();
+                return jsonString;
+            }
+            catch (HttpRequestException ex)
+            {
+                switch (ex.HttpRequestError)
+                {
+                    case HttpRequestError.UserAuthenticationError:
+                        // Unrecoverable so rethrow the exception
+                        throw;
+                    default:
+                        // Retry on other errors, after a delay
+                        if (RetryDelayMilliseconds > 0)
+                        {
+                            await Task.Delay(RetryDelayMilliseconds);
+                        }
+                        continue;
+                }
+            }
         }
-        string jsonString = await response.Content.ReadAsStringAsync();
-        return jsonString;
+        throw new HttpRequestException($"Request to {url} failed after {RetryLimit} attempts.");
     }
 
     /// <summary>

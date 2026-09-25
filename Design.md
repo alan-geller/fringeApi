@@ -4,10 +4,10 @@
 
 - The system should not impose restrictions on the user interface design.
 - The system should not require keeping a socket open at all times.
-- The system should support multithreaded access. In particular, it should allow multiple readers
-  to access the system concurrently without blocking each other, and should allow a single writer
+- The system should support multithreaded access. In particular, it should allow a single writer
   to access the system exclusively without unduly delaying readers.
-- The system should use UTC timestamps for all date and time information to avoid issues with time zones.
+- The system should use UTC timestamps for all date and time information because that is the
+  Edinburgh local time.
 - The system should allow all festival information to be saved to or loaded from local storage.
 
 We assume robust garbage collection and so don't worry about limiting pointers between objects, 
@@ -20,17 +20,54 @@ nor about avoiding pointer cycles.
 - Use UTC timestamps for all date and time information.
 - Use JSON objects for storing additional information in the `Extra` property of each class.
 - In general, prefer automatic properties over instance variables for class design.
-- Avoid propagating exceptions outside of the system's boundaries, especially on async methods.
 
 ## Object Model
 
-The primary objects in the Fringe dataset are Show, Performance, and Venue.
-In addition, there is a Festival object that acts as a container for the Shows, Performances, and Venues.
+The primary classes in the festival dataset are `Show`, `Performance`, and `Venue`.
+In addition, there is a `Festival` class that acts as a container for the `Shows`, `Performances`, 
+and `Venues`, and an `ApiClient` class that manages the actual Web service interactions.
 
-- A Show represents a theatrical production, including its title, genre, and performer.
-- A Performance represents a specific instance of a Show, including its date, time, and venue.
-- A Venue represents a location where Performances take place, including its name and address.
-- A Festival represents the overall event, containing all Shows, Performances, and Venues.
+- A `Show` represents a theatrical production, including its title, genre, and performer.
+- A `Performance` represents a specific instance of a Show, including its date, time, and venue.
+- A `Venue` represents a location where Performances take place, including its name and address.
+- A `Festival` represents the overall event, containing all Shows, Performances, and Venues.
+- An `ApiClient` represents the interface to the [Edinburgh Festival Web service](https://api.edinburghfestivalcity.com/).
+
+## Concurrency and Background Processing
+
+The typical usage pattern for festival data is:
+
+- Data gets loaded from local storage or the Web service.
+- Data is read/searched repeatedly in response to user requests. There is no need for multiple
+  reads to occur in parallel.
+- Data is periodically updated from the Web service. These updates should interfere as little as
+  possible with both existing and new reads.
+
+We rely on the CLR thread pool and make extensive use of the `Task` facility, rather than
+managing our own threading explicitly.
+In particular, the background update process is implemented using `Task` with explicit completions
+and using a cancellation token to allow halting the process.
+
+Because there's only ever a single reader, there's no benefit to the added complexity of read/write
+locks.
+Instead, we lock specific collection fields within the `Festival` object when reading or writing.
+In general, we lock the fields for the duration of an entire search when reading and for the
+duration of a single object find and update while writing.
+
+## Exception Handling
+
+Exceptions while reading should be essentially non-existent; if one occurs, it will probably be
+fatal (e.g., out of memory).
+
+Exceptions while initializing or while updating come in two varieties:
+
+- Recoverable errors, such as a connection failure trying to access the Web service; and
+- Unrecoverable errors, such as a Web service authentication failure.
+
+Recoverable errors must be caught and handled.
+Generally the appropriate behavior is to retry the operation, possibly after a delay.
+
+Unrecoverable errors should "bubble up" to the main thread.
 
 ## Show
 
@@ -109,4 +146,3 @@ A Festival represents the overall event, containing all Shows, Performances, and
 - `GetNearbyPerformances`: Returns the list of Performances taking place near a specified location and starting 
   within a specified time range.
 - `UpdateFromFringeDataset`: Updates the festival's information from a Fringe JSON dataset.
-
