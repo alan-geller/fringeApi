@@ -20,6 +20,23 @@ internal interface IJsonUpdatable
     void UpdateFromJson(JsonElement json);
 }
 
+public enum EdinburghFestival
+{
+    DemoFringe,
+    Fringe,
+    Jazz,
+    Book,
+    International,
+    Tattoo,
+    Art,
+    Hogmanay,
+    Science,
+    Imaginate,
+    Film,
+    Mela,
+    Storytelling
+}
+
 /// <summary>
 /// Represents a single Fringe festival dataset and the in-memory collection of venues, shows, and performances
 /// loaded from the Fringe API.
@@ -38,20 +55,28 @@ public sealed class Festival
     /// <summary>
     /// The festival identifier used when creating the API client.
     /// </summary>
-    public string Name { get; private set; } = string.Empty;
+    public EdinburghFestival Name { get; init; }
 
     /// <summary>
     /// The last time the festival data was successfully refreshed, with a 10-minute update buffer applied.
     /// </summary>
     public DateTime? LastUpdated { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the update margin in minutes used to determine if a refresh is needed.
+    /// </summary>
     public int UpdateMarginInMinutes { get; set; } = 10;
 
-    private Dictionary<string, Venue> VenuesById { get; } = new();
-    private Dictionary<string, Venue> VenuesByCode { get; } = new();
-    private Dictionary<string, Show> ShowsById { get; } = new();
-    public Dictionary<string, Performance> PerformancesById { get; } = new();
-    private ApiClient apiClient;
+    /// <summary>
+    /// Gets or sets the interval at which festival data should be refreshed.
+    /// </summary>
+    public TimeSpan UpdateInterval { get; set; } = TimeSpan.FromMinutes(10);
+
+    private Dictionary<string, Venue> VenuesById { get; } = [];
+    private Dictionary<string, Venue> VenuesByCode { get; } = [];
+    private Dictionary<string, Show> ShowsById { get; } = [];
+    private Dictionary<string, Performance> PerformancesById { get; } = [];
+    private ApiClient ApiClient { get; init; }
     private StreamWriter? logStream = null;
 
     /// <summary>
@@ -75,9 +100,9 @@ public sealed class Festival
     /// <param name="userId">The Fringe API user identifier.</param>
     /// <param name="apiKey">The Fringe API key.</param>
     /// <param name="festival">The festival name/code to query.</param>
-    public Festival(string userId, string apiKey, string festival = "demofringe")
+    public Festival(string userId, string apiKey, EdinburghFestival festival = EdinburghFestival.DemoFringe)
     {
-        this.apiClient = new ApiClient(userId, apiKey, festival);
+        this.ApiClient = new ApiClient(userId, apiKey, festival.ToString().ToLower());
         this.Name = festival;
     }
 
@@ -192,16 +217,17 @@ public sealed class Festival
         try
         {
             var processVenueUpdate = (JsonElement json) => ProcessItemUpdate<Venue>(json, VenuesById, CreateAndRecordVenue);
-            int venueUpdatesCount = await apiClient.ProcessPagedJsonVoidAsync("venues", args, processVenueUpdate);
+            int venueUpdatesCount = await ApiClient.ProcessPagedJsonVoidAsync("venues", args, processVenueUpdate);
             var processShowUpdate = (JsonElement json) => ProcessItemUpdate<Show>(json, ShowsById, CreateAndRecordShow);
-            int showUpdatesCount = await apiClient.ProcessPagedJsonVoidAsync("events", args, processShowUpdate);
+            int showUpdatesCount = await ApiClient.ProcessPagedJsonVoidAsync("events", args, processShowUpdate);
             LastUpdated = DateTime.UtcNow;
             return (venueUpdatesCount, showUpdatesCount);
         }
         catch (Exception ex)
         {
+            // Only unrecoverable errors should reach this point
             LogException(ex, "fetching and processing updates");
-            return (0, 0);
+            throw;
         }
     }
 
@@ -358,11 +384,13 @@ public sealed class Festival
         writer.WriteStartObject();
         // First write the festival header
         writer.WriteStartObject("festival");
-        writer.WriteString("name", Name);
+        writer.WriteString("name", Name.ToString());
         if (LastUpdated.HasValue)
         {
-            writer.WriteString("lastUpdated", LastUpdated.Value);
+            writer.WriteString("lastUpdated", LastUpdated.Value.ToString("o"));
         }
+        writer.WriteNumber("updateInterval", UpdateInterval.TotalMilliseconds);
+        writer.WriteNumber("updateMarginInMinutes", UpdateMarginInMinutes);
         writer.WriteEndObject(); // end festival object
 
         // Now the list of venues
@@ -446,5 +474,22 @@ public sealed class Festival
     public static Festival LoadFromStream(Stream stream)
     {
         throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// Runs a background update loop that periodically refreshes festival data from the Fringe dataset.
+    /// </summary>
+    /// <param name="cancellationToken">A token to signal cancellation of the background update task.</param>
+    /// <remarks>
+    /// This method will run indefinitely until the cancellation token is triggered.
+    /// Updates are performed at intervals defined by <see cref="UpdateInterval"/>.
+    /// </remarks>
+    public async Task BackgroundUpdateAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(UpdateInterval, cancellationToken);
+            var _ = await UpdateFromFringeDataset();
+        }
     }
 }
