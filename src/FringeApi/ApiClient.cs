@@ -18,6 +18,10 @@ public sealed class ApiClient
     private readonly string festival;
     public int RetryLimit { get; set; } = 5;
     public int RetryDelayMilliseconds { get; set; } = 1000;
+    public TimeSpan Timeout { 
+        get { return httpClient.Timeout; } 
+        set { httpClient.Timeout = value; } 
+    }
 
     const string BaseUrl = "https://api.edinburghfestivalcity.com";
 
