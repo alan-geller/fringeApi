@@ -1,3 +1,4 @@
+using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Web;
 
@@ -157,24 +158,25 @@ public sealed class Festival
     /// </remarks>
     public async Task<(int venueUpdatesCount, int showUpdatesCount)> UpdateFromFringeDataset()
     {
-        void ProcessItemUpdate<T>(JsonElement itemJson, Dictionary<string, T> itemsById, 
+        void ProcessItemUpdate<T>(JsonElement itemJson, Dictionary<string, T> itemsById,
             Func<string, T> createAndRecordItem) where T : IJsonUpdatable
         {
             if (itemJson.TryGetProperty("id", out var itemIdProperty))
             {
                 var itemId = itemIdProperty.GetString();
                 if (itemId == null) return; // This should never happen
-                if (itemsById.ContainsKey(itemId))
+                lock (itemsById)
                 {
-                    lock (itemsById)
+                    if (itemsById.ContainsKey(itemId))
                     {
                         itemsById[itemId].UpdateFromJson(itemJson);
                     }
-                }
-                else
-                {
-                    T item = createAndRecordItem(itemId);
-                    item.UpdateFromJson(itemJson);
+                    else
+                    {
+                        T item = createAndRecordItem(itemId);
+                        item.UpdateFromJson(itemJson);
+                    }
+
                 }
             }
             // The "else" should never happen because every item should have an "id" property
@@ -182,25 +184,21 @@ public sealed class Festival
 
         Venue CreateAndRecordVenue(string id)
         {
+            // Note that VenuesById is already locked here
             var venue = new Venue() { Festival = this, Id = id };
             VenuesById[venue.Id] = venue;
             if (!string.IsNullOrEmpty(venue.Code))
             {   
-                lock (VenuesByCode)
-                {
-                    VenuesByCode[venue.Code] = venue;
-                }
+                VenuesByCode[venue.Code] = venue;
             }
             return venue;
         }
 
         Show CreateAndRecordShow(string id)
         {
+            // Note that ShowsById is already locked here
             var show = new Show() { Festival = this, Id = id };
-            lock (ShowsById)
-            {
-                ShowsById[show.Id] = show;
-            }
+            ShowsById[show.Id] = show;
             return show;
         }
 
@@ -237,13 +235,13 @@ public sealed class Festival
     /// <param name="venue">The venue to add.</param>
     internal void AddVenue(Venue venue)
     {
-        // Venue ID and code are required and immutable
-        if (!VenuesById.ContainsKey(venue.Id))
+        lock (VenuesById)
         {
-            VenuesById[venue.Id] = venue;
-            if (!String.IsNullOrEmpty(venue.Code))
+            // Venue ID and code are required and immutable
+            if (!VenuesById.ContainsKey(venue.Id))
             {
-                lock (VenuesByCode)
+                VenuesById[venue.Id] = venue;
+                if (!String.IsNullOrEmpty(venue.Code))
                 {
                     VenuesByCode[venue.Code] = venue;
                 }
@@ -280,6 +278,22 @@ public sealed class Festival
     }
 
     /// <summary>
+    /// Retrieves a show by its unique identifier.
+    /// </summary>
+    /// <param name="id">The unique identifier of the show to retrieve.</param>
+    /// <returns>
+    /// The matching <see cref="Show"/> instance if found; otherwise, <see langword="null"/>.
+    /// </returns>
+    public Show? GetShowById(string id)
+    {
+        lock (ShowsById)
+        {
+            ShowsById.TryGetValue(id, out var show);
+            return show;
+        }
+    }
+
+    /// <summary>
     /// Returns all shows that have at least one performance in the specified date range.
     /// </summary>
     /// <param name="start">The inclusive start of the date window.</param>
@@ -294,15 +308,17 @@ public sealed class Festival
             (start, end) = (end, start);
         }
 
+        List<Show> matchingShows;
         lock (ShowsById)
         {
-            return ShowsById.Values
+            matchingShows = ShowsById.Values
                 .Where(show => show.Performances.Any(performance => performance.Start >= start && performance.Start <= end))
                 .Where(show => string.IsNullOrWhiteSpace(genre) || string.Equals(show.Genre, genre, StringComparison.OrdinalIgnoreCase))
                 .Where(show => string.IsNullOrWhiteSpace(venueName) || string.Equals(show.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase) || show.Performances.Any(p => string.Equals(p.Venue?.Name, venueName, StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(show => show.Title)
                 .ToList();
         }
+        // Do the sorting outside of the lock
+        return matchingShows.OrderBy(show => show.Title).ToList();
     }
 
     /// <summary>
@@ -346,8 +362,11 @@ public sealed class Festival
     /// <returns>The matching venue, if found.</returns>
     public Venue? GetVenueByCode(string code)
     {
-        VenuesByCode.TryGetValue(code, out var venue);
-        return venue;
+        lock (VenuesById)
+        {
+            VenuesByCode.TryGetValue(code, out var venue);
+            return venue;
+        }
     }
 
     /// <summary>
@@ -357,8 +376,11 @@ public sealed class Festival
     /// <returns>The matching venue, if found.</returns>
     internal Venue? GetVenueById(string id)
     {
-        VenuesById.TryGetValue(id, out var venue);
-        return venue;
+        lock (VenuesById)
+        {
+            VenuesById.TryGetValue(id, out var venue);
+            return venue;
+        }
     }
 
     /// <summary>
@@ -387,7 +409,7 @@ public sealed class Festival
         writer.WriteString("name", Name.ToString());
         if (LastUpdated.HasValue)
         {
-            writer.WriteString("lastUpdated", LastUpdated.Value.ToString("o"));
+            writer.WriteString("lastUpdated", LastUpdated.Value.ToString(DateFormat));
         }
         writer.WriteNumber("updateInterval", UpdateInterval.TotalMilliseconds);
         writer.WriteNumber("updateMarginInMinutes", UpdateMarginInMinutes);

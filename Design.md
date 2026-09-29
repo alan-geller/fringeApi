@@ -50,9 +50,14 @@ and using a cancellation token to allow halting the process.
 
 Because there's only ever a single reader, there's no benefit to the added complexity of read/write
 locks.
-Instead, we lock specific collection fields within the `Festival` object when reading or writing.
+Instead, we lock the appropriate collection fields within the `Festival` object when reading or writing.
 In general, we lock the fields for the duration of an entire search when reading and for the
 duration of a single object find and update while writing.
+
+For venues in particular, where there are two collection fields, we always lock the
+`VenuesById` field even if we're searching or updating the `VenuesByCode` field.
+Since these two collections are always updated in tandem, there's no real advantage
+to locking the two collections independently, and it's simpler to always lock the same field.
 
 ## Exception Handling
 
