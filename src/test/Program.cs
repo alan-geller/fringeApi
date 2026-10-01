@@ -10,7 +10,7 @@ var config = new ConfigurationBuilder()
     .Build();
 var apiKey = config["apiKey"] ?? "";
 
-var festival = new Festival("5Jb4HXteE1tG8UWA", apiKey);
+var festival = new Festival("5Jb4HXteE1tG8UWA", apiKey) { Name = EdinburghFestival.DemoFringe };
 var logStream = File.CreateText("festival.log");
 festival.SetLogStream(logStream);
 
@@ -30,6 +30,16 @@ var raw = File.CreateText("merged.json.gz");
 var str = new GZipStream(raw.BaseStream, CompressionMode.Compress);
 festival.SaveToStream(str);
 str.Close();
+
+var reloadedFestival = new Festival("5Jb4HXteE1tG8UWA", apiKey) { Name = EdinburghFestival.DemoFringe };
+using var mergedStream = File.OpenRead("merged.json.gz");
+using var gzipStream = new GZipStream(mergedStream, CompressionMode.Decompress);
+reloadedFestival.LoadFromStream(gzipStream);
+gzipStream.Close();
+mergedStream.Close();
+
+Console.WriteLine("Reloaded festival successfully.");
+Console.WriteLine($"{reloadedFestival.VenueCount} venues, {reloadedFestival.ShowCount} shows, {reloadedFestival.PerformanceCount} performances.");
 logStream.Close();
 
 // var client = new ApiClient("5Jb4HXteE1tG8UWA", apiKey, "demofringe");

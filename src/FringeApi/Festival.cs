@@ -56,7 +56,7 @@ public sealed class Festival
     /// <summary>
     /// The festival identifier used when creating the API client.
     /// </summary>
-    public EdinburghFestival Name { get; init; }
+    public required EdinburghFestival Name { get; init; }
 
     /// <summary>
     /// The last time the festival data was successfully refreshed, with a 10-minute update buffer applied.
@@ -400,7 +400,6 @@ public sealed class Festival
     /// <param name="stream">The destination stream.</param>
     public void SaveToStream(Stream stream)
     {
-        HashSet<string> skippedVenueKeys = new() { "id", "name", "address", "code", "position" };
         var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
         // Start the root object
         writer.WriteStartObject();
@@ -433,7 +432,7 @@ public sealed class Festival
             }
             foreach (var kvp in venue.Extra ?? new Dictionary<string, JsonElement>())
             {
-                if (skippedVenueKeys.Contains(kvp.Key) || kvp.Value.ValueKind == JsonValueKind.Null)
+                if (Venue.SkippedKeys.Contains(kvp.Key) || kvp.Value.ValueKind == JsonValueKind.Null)
                     continue;
                 writer.WritePropertyName(kvp.Key);
                 kvp.Value.WriteTo(writer);
@@ -493,9 +492,64 @@ public sealed class Festival
     /// </summary>
     /// <param name="stream">The source stream containing festival data.</param>
     /// <returns>The loaded festival.</returns>
-    public static Festival LoadFromStream(Stream stream)
+    public void LoadFromStream(Stream stream)
     {
-        throw new NotImplementedException();
+        using var doc = JsonDocument.Parse(stream);
+        var root = doc.RootElement;
+
+        // First, parse the basic Festival properties
+        if (root.TryGetProperty("festival", out var festivalElement))
+        {
+            var name = festivalElement.GetProperty("name").GetString();
+            if (name != this.Name.ToString())
+            {
+                throw new InvalidOperationException($"Festival name mismatch. Expected: {this.Name}, Found: {name}");
+            }
+            if (root.TryGetProperty("lastUpdated", out var lastUpdatedElement))
+            {
+                LastUpdated = Festival.ParseFringeDateTime(lastUpdatedElement);
+            }
+            UpdateInterval = TimeSpan.FromMilliseconds(festivalElement.GetProperty("updateInterval").GetInt32());
+            UpdateMarginInMinutes = festivalElement.GetProperty("updateMarginInMinutes").GetInt32();
+        }
+
+        // Now, vanues
+        if (root.TryGetProperty("venues", out var venuesElement))
+        {
+            foreach (var venueElement in venuesElement.EnumerateArray())
+            {
+                string? id;
+                if (venueElement.TryGetProperty("id", out var idElement) && ((id = idElement.GetString()) != null))
+                {
+                    var venue = new Venue() { Id = id, Festival = this };
+                    venue.UpdateFromJson(venueElement);
+                    VenuesById.Add(id, venue);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Venue element is missing an 'id' property.");
+                }
+            }
+        }
+
+        // And finally shows
+        if (root.TryGetProperty("shows", out var showsElement))
+        {
+            foreach (var showElement in showsElement.EnumerateArray())
+            {
+                string? id;
+                if (showElement.TryGetProperty("id", out var idElement) && ((id = idElement.GetString()) != null))
+                {
+                    var show = new Show() { Id = id, Festival = this };
+                    show.UpdateFromJson(showElement);
+                    ShowsById.Add(id, show);
+                }
+                else
+                {
+                    throw new InvalidOperationException("Show element is missing an 'id' property.");
+                }
+            }
+        }
     }
 
     /// <summary>
