@@ -21,13 +21,23 @@ Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show u
 Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
 var pos = new Position { Lat = 55.957, Lon = -3.17 }; // Example coordinates for Edinburgh
-var venuesNearby = await festival.GetVenuesByLocationAsync(pos, 2); // Example: 2 km radius
+var startDate = new DateTime(2026, 8, 12);
+var endDate = startDate.AddDays(1);
+var performancesComingUp = await festival.GetNearbyPerformancesAsync(pos, startDate, 
+			endDate, 2); // Example: next 1 days within 2 km radius
+Console.WriteLine($"{performancesComingUp.Count,0} upcoming performances:");
+foreach (var performance in performancesComingUp)
+{
+    Console.WriteLine($"{performance.Start}: {performance.Show?.Title} at {performance.Venue?.Name}");
+}
+
+/* var venuesNearby = await festival.GetVenuesByLocationAsync(pos, 2); // Example: 2 km radius
 
 Console.WriteLine($"{venuesNearby.Count,0} nearby venues:");
 foreach (var venue in venuesNearby)
 {
     Console.WriteLine($"{venue.Name} ({venue.Address})");
-}
+} */
 
 // (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 

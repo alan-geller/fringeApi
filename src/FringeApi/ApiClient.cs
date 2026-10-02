@@ -101,6 +101,7 @@ public sealed class ApiClient
                         throw;
                     default:
                         // Retry on other errors, after a delay
+                        //Console.WriteLine($"Request to {url} failed with error: {ex.Message}. Retrying...");
                         if (RetryDelayMilliseconds > 0)
                         {
                             await Task.Delay(RetryDelayMilliseconds);

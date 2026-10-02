@@ -139,10 +139,22 @@ public sealed class Festival
     /// </summary>
     /// <param name="element">The JSON element containing the datetime string.</param>
     /// <returns>The parsed date and time in the festival's expected format.</returns>
-    internal static DateTime ParseFringeDateTime(JsonElement element)
+    internal static DateTime ParseFestivalDateTime(JsonElement element)
     {
         var s = element.GetString() ?? string.Empty;
         return DateTime.ParseExact(s, DateFormat, null);
+    }
+
+    /// <summary>
+    /// Formats a <see cref="DateTime"/> for use in a Fringe API request parameter.
+    /// </summary>
+    /// <param name="dateTime">The date and time to encode.</param>
+    /// <returns>
+    /// The timestamp formatted using the festival's canonical API format and URL-encoded for query-string use.
+    /// </returns>
+    internal static string FormatFestivalDateTime(DateTime dateTime)
+    {
+        return HttpUtility.UrlEncode(dateTime.ToString(DateFormat));
     }
 
     /// <summary>
@@ -206,7 +218,7 @@ public sealed class Festival
         if (LastUpdated.HasValue)
         {
             // Note that Edinburgh is in the GMT timezone, so the date should be in UTC
-            var date = HttpUtility.UrlEncode(LastUpdated.Value.AddMinutes(-UpdateMarginInMinutes).ToString(DateFormat));
+            var date = FormatFestivalDateTime(LastUpdated.Value.AddMinutes(-UpdateMarginInMinutes));
             // Append the modified_from filter to the API request
             args = $"modified_from={date}&";
         }
@@ -332,30 +344,40 @@ public sealed class Festival
     /// <param name="start">The start of the performance window.</param>
     /// <param name="end">The end of the performance window.</param>
     /// <param name="maxDistanceKm">The maximum permitted distance from the search location.</param>
-    /// <param name="maxLeadTime">The maximum lead time before performance start.</param>
     /// <returns>A list of matching performances sorted by start time.</returns>
-    public List<Performance> GetNearbyPerformances(double latitude, double longitude, DateTime start, DateTime end, double maxDistanceKm, TimeSpan maxLeadTime)
+    public async Task<List<Performance>> GetNearbyPerformancesAsync(Position position, DateTime? start, DateTime? end, int maxDistanceKm)
     {
-        if (end < start)
+        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers";
+        if (start.HasValue)
         {
-            (start, end) = (end, start);
+            query += $"&date_from={FormatFestivalDateTime(start.Value)}";
+        }
+        if (end.HasValue)
+        {
+            query += $"&date_to={FormatFestivalDateTime(end.Value)}";
+        }
+        var json = await ApiClient.GetJsonAsync("events", query);
+
+        var performances = new List<Performance>();
+        foreach (var showElement in json.RootElement.EnumerateArray())
+        {
+            if (showElement.TryGetProperty("id", out var showIdElement))
+            {
+                var showId = showIdElement.GetString();
+                if (!String.IsNullOrEmpty(showId))
+                {
+                    var show = GetShowById(showId);
+                    if (show != null)
+                    {
+                        var performancesInRange = show.Performances
+                            .Where(p => (!start.HasValue || p.Start >= start.Value) && (!end.HasValue || p.Start <= end.Value));
+                        performances.AddRange(performancesInRange);
+                    }
+                }
+            }
         }
 
-        return PerformancesById.Values
-            .Where(p => p.Start >= start && p.Start <= end)
-            .Where(p => p.Venue != null)
-            .Where(p =>
-            {
-                if (p.Venue is null) return false;
-                if (string.IsNullOrWhiteSpace(p.Venue.Code) && string.IsNullOrWhiteSpace(p.Venue.Address))
-                {
-                    return true;
-                }
-
-                return true;
-            })
-            .OrderBy(p => p.Start)
-            .ToList();
+        return [.. performances.OrderBy(p => p.Start)];
     }
 
     /// <summary>
@@ -534,7 +556,7 @@ public sealed class Festival
             }
             if (root.TryGetProperty("lastUpdated", out var lastUpdatedElement))
             {
-                LastUpdated = Festival.ParseFringeDateTime(lastUpdatedElement);
+                LastUpdated = Festival.ParseFestivalDateTime(lastUpdatedElement);
             }
             UpdateInterval = TimeSpan.FromMilliseconds(festivalElement.GetProperty("updateInterval").GetInt32());
             UpdateMarginInMinutes = festivalElement.GetProperty("updateMarginInMinutes").GetInt32();

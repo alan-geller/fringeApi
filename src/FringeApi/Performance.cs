@@ -69,10 +69,10 @@ public class Performance
                 case "id":
                     continue;
                 case "start":
-                    Start = Festival.ParseFringeDateTime(kvp.Value);
+                    Start = Festival.ParseFestivalDateTime(kvp.Value);
                     continue;
                 case "end":
-                    End = Festival.ParseFringeDateTime(kvp.Value);
+                    End = Festival.ParseFestivalDateTime(kvp.Value);
                     continue;
                 default:
                     Extra ??= new Dictionary<string, JsonElement>();
