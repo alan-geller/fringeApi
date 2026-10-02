@@ -288,8 +288,11 @@ public sealed class Festival
     {
         lock (ShowsById)
         {
-            ShowsById.TryGetValue(id, out var show);
-            return show;
+            if (ShowsById.TryGetValue(id, out var show))
+            {
+                return show;
+            }
+            return null;
         }
     }
 
@@ -364,8 +367,11 @@ public sealed class Festival
     {
         lock (VenuesById)
         {
-            VenuesByCode.TryGetValue(code, out var venue);
-            return venue;
+            if (VenuesByCode.TryGetValue(code, out var venue))
+            {
+                return venue;
+            }
+            return null;
         }
     }
 
@@ -374,12 +380,15 @@ public sealed class Festival
     /// </summary>
     /// <param name="id">The venue identifier.</param>
     /// <returns>The matching venue, if found.</returns>
-    internal Venue? GetVenueById(string id)
+    public Venue? GetVenueById(string id)
     {
         lock (VenuesById)
         {
-            VenuesById.TryGetValue(id, out var venue);
-            return venue;
+            if (VenuesById.TryGetValue(id, out var venue))
+            {
+                return venue;
+            }
+            return null;
         }
     }
 
@@ -389,9 +398,27 @@ public sealed class Festival
     /// <param name="position">The target position.</param>
     /// <param name="maxDistanceKm">The maximum allowed distance in kilometres.</param>
     /// <returns>The nearby venues, if any exist.</returns>
-    public List<Venue> GetVenuesByLocation(Position position, double maxDistanceKm)
+    public async Task<List<Venue>> GetVenuesByLocationAsync(Position position, int maxDistanceKm)
     {
-        throw new NotImplementedException();
+        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers";
+        var json = await ApiClient.GetJsonAsync("venues", query);
+        var venues = new List<Venue>();
+        foreach (var venueElement in json.RootElement.EnumerateArray())
+        {
+            if (venueElement.TryGetProperty("id", out var venueIdElement))
+            {
+                var venueId = venueIdElement.GetString();
+                if (!String.IsNullOrEmpty(venueId))
+                {
+                    var venue = GetVenueById(venueId);
+                    if (venue != null)
+                    {
+                        venues.Add(venue);
+                    }
+                }
+            }
+        }
+        return venues;
     }
 
     /// <summary>

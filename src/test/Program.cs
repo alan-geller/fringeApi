@@ -20,13 +20,22 @@ Console.WriteLine("Festival loaded successfully.");
 Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
 Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
+var pos = new Position { Lat = 55.957, Lon = -3.17 }; // Example coordinates for Edinburgh
+var venuesNearby = await festival.GetVenuesByLocationAsync(pos, 2); // Example: 2 km radius
+
+Console.WriteLine($"{venuesNearby.Count,0} nearby venues:");
+foreach (var venue in venuesNearby)
+{
+    Console.WriteLine($"{venue.Name} ({venue.Address})");
+}
+
 // (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 
 // Console.WriteLine("Festival updated successfully.");
 // Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
 // Console.WriteLine($"Now {festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
-var raw = File.CreateText("merged.json.gz");
+/* var raw = File.CreateText("merged.json.gz");
 var str = new GZipStream(raw.BaseStream, CompressionMode.Compress);
 festival.SaveToStream(str);
 str.Close();
@@ -40,6 +49,7 @@ mergedStream.Close();
 
 Console.WriteLine("Reloaded festival successfully.");
 Console.WriteLine($"{reloadedFestival.VenueCount} venues, {reloadedFestival.ShowCount} shows, {reloadedFestival.PerformanceCount} performances.");
+ */
 logStream.Close();
 
 // var client = new ApiClient("5Jb4HXteE1tG8UWA", apiKey, "demofringe");
