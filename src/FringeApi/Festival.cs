@@ -423,6 +423,27 @@ public sealed class Festival
     }
 
     /// <summary>
+    /// Finds the venues within the supplied distance threshold of the given location.
+    /// This method uses great-circle distances based on longitude and latitude, which
+    /// is approximate in much of Edinburgh because of the city's 3-dimensional nature.
+    /// </summary>
+    /// <param name="position">The target position to search around.</param>
+    /// <param name="maxDistanceKm">The maximum distance in kilometres to include.</param>
+    /// <returns>A list of nearby venues sorted by distance from the supplied position.</returns>
+    public List<Venue> GetVenuesByLocation(Position position, int maxDistanceKm)
+    {
+        var nearbyVenues = new SortedSet<Venue>(Comparer<Venue>.Create((v1, v2) => v1.Position!.DistanceTo(position).CompareTo(v2.Position!.DistanceTo(position))));
+        foreach (var venue in VenuesById.Values)
+        {
+            if (venue.Position != null && venue.Position.DistanceTo(position) <= maxDistanceKm)
+            {
+                nearbyVenues.Add(venue);
+            }
+        }
+        return nearbyVenues.ToList();
+    }
+
+    /// <summary>
     /// Serializes the festival and all associated venue/show data to the supplied stream as JSON.
     /// </summary>
     /// <param name="stream">The destination stream.</param>

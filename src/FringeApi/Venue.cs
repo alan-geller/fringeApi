@@ -116,4 +116,16 @@ public class Position
     /// Gets or sets the longitude value.
     /// </summary>
     public double Lon { get; set; }
+
+    public double DistanceTo(Position other)
+    {
+        var dLat = (other.Lat - Lat) * Math.PI / 180.0;
+        var dLon = (other.Lon - Lon) * Math.PI / 180.0;
+        var chord = 2 * Math.Sqrt(Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(Lat * Math.PI / 180.0) * Math.Cos(other.Lat * Math.PI / 180.0) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2));
+        var angle = 2 * Math.Asin(chord / 2);
+        var earthRadiusKm = 6371.0;
+        return earthRadiusKm * angle;
+    }
 }
