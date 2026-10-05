@@ -78,7 +78,7 @@ public sealed class Festival
     private Dictionary<string, Show> ShowsById { get; } = [];
     private Dictionary<string, Performance> PerformancesById { get; } = [];
     private ApiClient ApiClient { get; init; }
-    private StreamWriter? logStream = null;
+    private Logger logger;
 
     /// <summary>
     /// Gets the number of shows currently in memory.
@@ -103,35 +103,14 @@ public sealed class Festival
     /// <param name="festival">The festival name/code to query.</param>
     public Festival(string userId, string apiKey, EdinburghFestival festival = EdinburghFestival.DemoFringe)
     {
-        this.ApiClient = new ApiClient(userId, apiKey, festival.ToString().ToLower());
+        logger = new Logger();
+        this.ApiClient = new ApiClient(userId, apiKey, festival.ToString().ToLower(), logger);
         this.Name = festival;
     }
 
     public void SetLogStream(StreamWriter logStream)
     {
-        if (this.logStream != null)
-        {
-            this.logStream.Dispose();
-        }
-        this.logStream = logStream;
-    }
-
-    internal void Log(string message)
-    {
-        if (logStream != null)
-        {
-            logStream.WriteLine(message);
-            logStream.Flush();
-        }
-    }
-
-    internal void LogException(Exception ex, string context)
-    {
-        if (logStream != null)
-        {
-            logStream.WriteLine($"Exception {ex.Message} while '{context}'");
-            logStream.Flush();
-        }
+        logger.SetLogStream(logStream);
     }
 
     /// <summary>
@@ -236,7 +215,7 @@ public sealed class Festival
         catch (Exception ex)
         {
             // Only unrecoverable errors should reach this point
-            LogException(ex, "fetching and processing updates");
+            logger.LogException(ex, "fetching and processing updates");
             throw;
         }
     }
@@ -347,21 +326,9 @@ public sealed class Festival
     /// <returns>A list of matching performances sorted by start time.</returns>
     public async Task<List<Performance>> GetNearbyPerformancesAsync(Position position, DateTime? start, DateTime? end, int maxDistanceKm)
     {
-        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers";
-        if (start.HasValue)
+        void ProcessElement(JsonElement element, List<Performance> performances)
         {
-            query += $"&date_from={FormatFestivalDateTime(start.Value)}";
-        }
-        if (end.HasValue)
-        {
-            query += $"&date_to={FormatFestivalDateTime(end.Value)}";
-        }
-        var json = await ApiClient.GetJsonAsync("events", query);
-
-        var performances = new List<Performance>();
-        foreach (var showElement in json.RootElement.EnumerateArray())
-        {
-            if (showElement.TryGetProperty("id", out var showIdElement))
+            if (element.TryGetProperty("id", out var showIdElement))
             {
                 var showId = showIdElement.GetString();
                 if (!String.IsNullOrEmpty(showId))
@@ -377,7 +344,19 @@ public sealed class Festival
             }
         }
 
-        return [.. performances.OrderBy(p => p.Start)];
+        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers&";
+        if (start.HasValue)
+        {
+            query += $"date_from={FormatFestivalDateTime(start.Value)}&";
+        }
+        if (end.HasValue)
+        {
+            query += $"date_to={FormatFestivalDateTime(end.Value)}&";
+        }
+
+        var result = await ApiClient.ProcessPagedJsonAsync<Performance>("events", query, 
+            ProcessElement);
+        return result.OrderBy(p => p.Start).ToList();
     }
 
     /// <summary>
@@ -422,10 +401,7 @@ public sealed class Festival
     /// <returns>The nearby venues, if any exist.</returns>
     public async Task<List<Venue>> GetVenuesByLocationAsync(Position position, int maxDistanceKm)
     {
-        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers";
-        var json = await ApiClient.GetJsonAsync("venues", query);
-        var venues = new List<Venue>();
-        foreach (var venueElement in json.RootElement.EnumerateArray())
+        void ProcessElement(JsonElement venueElement, List<Venue> venues)
         {
             if (venueElement.TryGetProperty("id", out var venueIdElement))
             {
@@ -440,6 +416,9 @@ public sealed class Festival
                 }
             }
         }
+
+        var query = $"lat={position.Lat}&lon={position.Lon}&distance={maxDistanceKm}kilometers&";
+        var venues = await ApiClient.ProcessPagedJsonAsync<Venue>("venues", query, ProcessElement);
         return venues;
     }
 

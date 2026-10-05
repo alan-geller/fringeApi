@@ -14,21 +14,35 @@ var festival = new Festival("5Jb4HXteE1tG8UWA", apiKey) { Name = EdinburghFestiv
 var logStream = File.CreateText("festival.log");
 festival.SetLogStream(logStream);
 
-var (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
+using var mergedStream = File.OpenRead("merged.json.gz");
+using var gzipStream = new GZipStream(mergedStream, CompressionMode.Decompress);
+festival.LoadFromStream(gzipStream);
+gzipStream.Close();
+mergedStream.Close();
+
+// var (venueUpdatesCount, showUpdatesCount) = await festival.UpdateFromFringeDataset();
 
 Console.WriteLine("Festival loaded successfully.");
-Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
+// Console.WriteLine($"{venueUpdatesCount} venue updates, {showUpdatesCount} show updates.");
 Console.WriteLine($"{festival.ShowCount} shows, {festival.VenueCount} venues, {festival.PerformanceCount} performances.");
 
 var pos = new Position { Lat = 55.957, Lon = -3.17 }; // Example coordinates for Edinburgh
-var startDate = new DateTime(2026, 8, 12);
-var endDate = startDate.AddDays(1);
-var performancesComingUp = await festival.GetNearbyPerformancesAsync(pos, startDate, 
-			endDate, 2); // Example: next 1 days within 2 km radius
-Console.WriteLine($"{performancesComingUp.Count,0} upcoming performances:");
-foreach (var performance in performancesComingUp)
+
+// var startDate = new DateTime(2026, 8, 12);
+// var endDate = startDate.AddDays(1);
+// var performancesComingUp = await festival.GetNearbyPerformancesAsync(pos, startDate, 
+// 			endDate, 2); // Example: next 1 days within 2 km radius
+// Console.WriteLine($"{performancesComingUp.Count,0} upcoming performances:");
+// foreach (var performance in performancesComingUp)
+// {
+//     Console.WriteLine($"{performance.Start}: {performance.Show?.Title} at {performance.Venue?.Name}");
+// }
+
+var venues = await festival.GetVenuesByLocationAsync(pos, 2); // Example: 2 km radius
+Console.WriteLine($"{venues.Count,0} nearby venues:");
+foreach (var venue in venues)
 {
-    Console.WriteLine($"{performance.Start}: {performance.Show?.Title} at {performance.Venue?.Name}");
+    Console.WriteLine($"{venue.Name} ({venue.Address})");
 }
 
 /* var venuesNearby = await festival.GetVenuesByLocationAsync(pos, 2); // Example: 2 km radius

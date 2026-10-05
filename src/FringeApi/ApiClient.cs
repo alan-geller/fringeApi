@@ -10,7 +10,7 @@ namespace FringeApi;
 /// This client builds the required festival URL, appends the signature query parameter, and wraps the HTTP response
 /// so callers can retrieve either raw JSON text or a parsed <see cref="JsonDocument"/>.
 /// </remarks>
-public sealed class ApiClient
+internal sealed class ApiClient
 {
     private static readonly HttpClient httpClient = new HttpClient();
     private readonly string userId;
@@ -25,17 +25,20 @@ public sealed class ApiClient
 
     const string BaseUrl = "https://api.edinburghfestivalcity.com";
 
+    private readonly Logger logger;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="ApiClient"/> class.
     /// </summary>
     /// <param name="userId">The festival API user identifier used in the signed request.</param>
     /// <param name="apiKey">The shared secret used to generate the HMAC signature.</param>
     /// <param name="festival">The festival name to include in the request. The default value is "demofringe".</param>
-    public ApiClient(string userId, string apiKey, string festival = "demofringe")
+    public ApiClient(string userId, string apiKey, string festival, Logger logger)
     {
         this.userId = userId;
         this.apiKey = apiKey;
         this.festival = festival;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -101,7 +104,7 @@ public sealed class ApiClient
                         throw;
                     default:
                         // Retry on other errors, after a delay
-                        //Console.WriteLine($"Request to {url} failed with error: {ex.Message}. Retrying...");
+                        logger.Log($"Request to {url} failed with error: {ex.Message}. Retrying...");
                         if (RetryDelayMilliseconds > 0)
                         {
                             await Task.Delay(RetryDelayMilliseconds);
@@ -134,12 +137,12 @@ public sealed class ApiClient
     /// <typeparam name="T">The type produced by the item-processing callback.</typeparam>
     /// <param name="endpoint">The API endpoint path to request.</param>
     /// <param name="filter">Additional query-string prefix to include before the pagination parameters.</param>
-    /// <param name="processUpdates">A callback that transforms the JSON document into a result item.</param>
+    /// <param name="processUpdates">A callback that adds a JSON element onto a result item.</param>
     /// <returns>A list containing all non-null values returned by <paramref name="processUpdates"/>.</returns>
     /// <exception cref="HttpRequestException">Thrown when the HTTP response indicates a failure status code.</exception>
     /// <exception cref="JsonException">Thrown when the response content is not valid JSON.</exception>
     internal async Task<List<T>> ProcessPagedJsonAsync<T>(string endpoint, string filter, 
-        Func<JsonDocument, T?> processUpdates)
+        Action<JsonElement, List<T>> processUpdates)
     {
         var start = 0;
         var chunkSize = 100;
@@ -152,11 +155,7 @@ public sealed class ApiClient
             {
                 foreach (var item in json.RootElement.EnumerateArray())
                 {
-                    var processed = processUpdates(json);
-                    if (processed != null)
-                    {
-                        result.Add(processed);
-                    }
+                    processUpdates(item, result);
                 }
                 start += chunkSize;
                 thisCount = json.RootElement.GetArrayLength();
