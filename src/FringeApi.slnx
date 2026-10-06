@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="FringeApi.Tests/FringeApi.Tests.csproj" />
+  <Project Path="FringeApi/FringeApi.csproj" />
+</Solution>
