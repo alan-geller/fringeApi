@@ -2,6 +2,7 @@ using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Web;
 
+[assembly:System.Runtime.CompilerServices.InternalsVisibleTo("FringeApi.Tests")]
 namespace FringeApi;
 
 /// <summary>
@@ -56,7 +57,7 @@ public sealed class Festival
     /// <summary>
     /// The festival identifier used when creating the API client.
     /// </summary>
-    public required EdinburghFestival Name { get; init; }
+    public EdinburghFestival Name { get; init; }
 
     /// <summary>
     /// The last time the festival data was successfully refreshed, with a 10-minute update buffer applied.

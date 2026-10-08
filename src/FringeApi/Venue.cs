@@ -36,7 +36,7 @@ public class Venue : IJsonUpdatable
     /// <summary>
     /// Gets the UTC timestamp of the last update received for this venue.
     /// </summary>
-    public DateTime LastUpdated { get; private set; } = DateTime.UtcNow;
+    public DateTime LastUpdated { get; private set; } = DateTime.MinValue;
 
     /// <summary>
     /// Gets the festival that owns this venue.
@@ -91,6 +91,10 @@ public class Venue : IJsonUpdatable
             var lon = positionProperty.GetProperty("lon").GetDouble();
             Position = new Position { Lat = lat, Lon = lon };
         }
+        if (venueJson.TryGetProperty("updated", out var updatedProperty) && updatedProperty.ValueKind == JsonValueKind.String)
+        {
+            LastUpdated = Festival.ParseFestivalDateTime(updatedProperty);
+        }
         foreach (var kvp in venueJson.EnumerateObject())
         {
             if (SkippedKeys.Contains(kvp.Name) || kvp.Value.ValueKind == JsonValueKind.Null)
@@ -98,7 +102,6 @@ public class Venue : IJsonUpdatable
             Extra ??= new Dictionary<string, JsonElement>();
             Extra[kvp.Name] = kvp.Value.Clone();
         }
-        LastUpdated = DateTime.UtcNow;
     }
 }
 
