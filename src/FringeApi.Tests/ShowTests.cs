@@ -360,5 +360,7 @@ public class ShowTests
         Assert.Equal("FAKE On the Watchlist", show.Title);
         Assert.Equal(12, show.Performances.Count);
         Assert.Equal(12, show.PerformancesById.Count);
+        Assert.All(show.Performances, p => Assert.Equal(show, p.Show));
+        Assert.Contains("186ys3w", show.PerformancesById);
     }
 }
